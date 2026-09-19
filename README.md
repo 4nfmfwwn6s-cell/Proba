@@ -164,11 +164,18 @@ remembers them across reboots and app restarts.
   - Asked in Hungarian how to say something in English (e.g. *"Angolul hogy kell mondani: sajnos nem tudok
     időben ott lenni?"*)? That's **not** graded as a mistake. Instead the app speaks the English sentence
     slowly and clearly, adds a short **written** Hungarian note on register or an alternative phrasing, and
-    invites you to say it back. These show up in the session summary as **"Kért kifejezések"** (phrases you
-    asked for), and feed into the vocabulary review list — never counted as errors.
-  - Said something else in Hungarian mid-conversation (e.g. *"mit jelent ez?"*, *"nem értem"*, *"mondd
-    lassabban"*)? The spoken reply is still entirely in English — the app answers or rephrases at your level in
-    simple English and keeps the conversation going; any Hungarian help it adds is written-only, never spoken.
+    invites you to say it back.
+  - Just spoke Hungarian as your actual turn — an answer, a comment, anything — instead of asking how to say
+    it? Also **not** graded as a mistake, treated the same way: the app shows the English version of what you
+    said in writing under your bubble, speaks it aloud in English, and then genuinely continues the
+    conversation in English (a real follow-up, not just "try saying it").
+
+    Both of these show up in the session summary as **"Kért kifejezések"** (phrases you asked for) and feed
+    into the vocabulary review list — never counted as errors.
+  - Said something else in Hungarian that's *about* the conversation rather than content you're trying to say
+    (e.g. *"mit jelent ez?"*, *"nem értem"*, *"mondd lassabban"*)? The spoken reply is still entirely in
+    English — the app answers or rephrases at your level in simple English and keeps the conversation going;
+    any Hungarian help it adds is written-only, never spoken.
 
   The EN/HU switch only controls *transcription accuracy* (which language the recognizer listens for); the
   actual classification — which of the three cases above applies — is always done by Claude on the finished

@@ -21,12 +21,12 @@ const CORRECTION_TOOL = {
         type: "string",
         enum: ["conversation", "translation_request", "meta_question"],
         description:
-          "conversation: the learner spoke English as part of the conversation. translation_request: the learner asked in Hungarian how to say a specific phrase in English (e.g. 'Angolul hogy kell mondani...'). meta_question: the learner said something else in Hungarian mid-conversation, not a specific translation request (e.g. 'mit jelent ez?', 'nem értem', 'mondd lassabban').",
+          "conversation: the learner spoke English as part of the conversation. translation_request: the learner said something in Hungarian that wasn't a meta question - either explicitly asking how to say a phrase in English (e.g. 'Angolul hogy kell mondani...'), or just speaking Hungarian as their actual turn (an answer/comment/anything) instead of English, with no explicit 'how do I say' framing. meta_question: the learner said something in Hungarian that is a comment/question about the conversation or language itself, not content they're trying to communicate (e.g. 'mit jelent ez?', 'nem értem', 'mondd lassabban').",
       },
       reply: {
         type: "string",
         description:
-          "Always spoken aloud in English, regardless of turnType - must never contain Hungarian text. For turnType=conversation: the natural spoken English conversational reply, continuing the conversation, never mentioning grammar or corrections. For turnType=translation_request: a short English invitation for the learner to try saying the sentence themselves. For turnType=meta_question: a complete, level-appropriate English answer or rephrasing that actually addresses what the learner said, standing on its own without relying on metaReplyHu.",
+          "Always spoken aloud in English, regardless of turnType - must never contain Hungarian text. For turnType=conversation: the natural spoken English conversational reply, continuing the conversation, never mentioning grammar or corrections. For turnType=translation_request: if the learner explicitly asked how to say something, a short English invitation to try saying it themselves; if they just spoke Hungarian as their turn (no explicit ask), a genuine English conversational continuation responding to what they said (as if they'd said translation.englishSentence in English) - not just an invitation to repeat it. For turnType=meta_question: a complete, level-appropriate English answer or rephrasing that actually addresses what the learner said, standing on its own without relying on metaReplyHu.",
       },
       correction: {
         type: "object",
@@ -62,7 +62,8 @@ const CORRECTION_TOOL = {
         properties: {
           englishSentence: {
             type: "string",
-            description: "The natural, correct English translation of what the learner asked how to say.",
+            description:
+              "The natural, correct English translation of what the learner said - either the phrase they explicitly asked how to say, or the Hungarian sentence they actually spoke as their turn.",
           },
           hungarianNote: {
             type: "string",
