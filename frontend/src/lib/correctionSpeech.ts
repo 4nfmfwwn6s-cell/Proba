@@ -1,8 +1,10 @@
 import type { ChatTurnResult, Correction, CorrectionSpeechLevel } from "../types";
 
+// Every spoken part is always in English - the Hungarian explanation,
+// translation note, and meta-question note are shown in writing only, never
+// spoken. So a SpeechPart doesn't need a language tag.
 export interface SpeechPart {
   text: string;
-  lang: "en" | "hu";
   rate: number;
 }
 
@@ -12,8 +14,9 @@ const SLOW_RATE_MULTIPLIER = 0.8;
 
 /**
  * Builds the ordered sequence of TTS parts for one assistant turn: the
- * corrected sentence (slow, English) and/or the Hungarian explanation - per
- * the profile's correction-speech level - followed by the normal reply.
+ * corrected English sentence (slow), if correction speech is on and there
+ * was a mistake, followed by the normal reply. The Hungarian explanation is
+ * never spoken - it's shown in writing only, under the learner's bubble.
  * Pure and DOM-free so it's easy to unit test independently of the Web
  * Speech / audio playback machinery.
  */
@@ -25,26 +28,22 @@ export function buildSpokenSequence(
 ): SpeechPart[] {
   const parts: SpeechPart[] = [];
 
-  if (correction && level !== "off") {
-    parts.push({ text: correction.corrected, lang: "en", rate: baseSpeed * SLOW_RATE_MULTIPLIER });
-    if (level === "corrected_and_explanation") {
-      parts.push({ text: correction.explanationHu, lang: "hu", rate: baseSpeed });
-    }
+  if (correction && level === "on") {
+    parts.push({ text: correction.corrected, rate: baseSpeed * SLOW_RATE_MULTIPLIER });
   }
 
-  parts.push({ text: replyText, lang: "en", rate: baseSpeed });
+  parts.push({ text: replyText, rate: baseSpeed });
 
   return parts;
 }
 
 /**
  * Builds the spoken sequence for a full chat turn result, dispatching on
- * turnType: a translation_request always speaks the English sentence (slow),
- * then the Hungarian note, then the invite; a meta_question always speaks
- * the Hungarian answer then the English steer-back; a plain conversation
- * turn defers to buildSpokenSequence (correction-level gated, as above).
- * Unlike corrections, translation/meta answers are always spoken - they
- * aren't gated by the correction-speech-level setting.
+ * turnType: a translation_request speaks the English sentence (slow) then
+ * the invite; a meta_question just speaks the (English) reply; a plain
+ * conversation turn defers to buildSpokenSequence (correction-level gated,
+ * as above). The Hungarian note/explanation is never spoken for any turn
+ * type - only ever shown in writing.
  */
 export function buildSpokenSequenceForTurn(
   result: Pick<ChatTurnResult, "reply" | "correction" | "turnType" | "translation" | "metaReplyHu">,
@@ -53,20 +52,14 @@ export function buildSpokenSequenceForTurn(
 ): SpeechPart[] {
   if (result.turnType === "translation_request" && result.translation) {
     const parts: SpeechPart[] = [
-      { text: result.translation.englishSentence, lang: "en", rate: baseSpeed * SLOW_RATE_MULTIPLIER },
+      { text: result.translation.englishSentence, rate: baseSpeed * SLOW_RATE_MULTIPLIER },
     ];
-    if (result.translation.hungarianNote) {
-      parts.push({ text: result.translation.hungarianNote, lang: "hu", rate: baseSpeed });
-    }
-    if (result.reply) parts.push({ text: result.reply, lang: "en", rate: baseSpeed });
+    if (result.reply) parts.push({ text: result.reply, rate: baseSpeed });
     return parts;
   }
 
   if (result.turnType === "meta_question") {
-    const parts: SpeechPart[] = [];
-    if (result.metaReplyHu) parts.push({ text: result.metaReplyHu, lang: "hu", rate: baseSpeed });
-    if (result.reply) parts.push({ text: result.reply, lang: "en", rate: baseSpeed });
-    return parts;
+    return result.reply ? [{ text: result.reply, rate: baseSpeed }] : [];
   }
 
   return buildSpokenSequence(result.reply, result.correction, level, baseSpeed);

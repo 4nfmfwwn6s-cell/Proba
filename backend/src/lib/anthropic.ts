@@ -26,7 +26,7 @@ const CORRECTION_TOOL = {
       reply: {
         type: "string",
         description:
-          "For turnType=conversation: the natural spoken English conversational reply, continuing the conversation, never mentioning grammar or corrections. For turnType=translation_request: a short English invitation for the learner to try saying the sentence themselves. For turnType=meta_question: a short English phrase that steers the conversation back on track.",
+          "Always spoken aloud in English, regardless of turnType - must never contain Hungarian text. For turnType=conversation: the natural spoken English conversational reply, continuing the conversation, never mentioning grammar or corrections. For turnType=translation_request: a short English invitation for the learner to try saying the sentence themselves. For turnType=meta_question: a complete, level-appropriate English answer or rephrasing that actually addresses what the learner said, standing on its own without relying on metaReplyHu.",
       },
       correction: {
         type: "object",
@@ -67,14 +67,14 @@ const CORRECTION_TOOL = {
           hungarianNote: {
             type: "string",
             description:
-              "A short Hungarian note about register/formality or a natural alternative phrasing, one sentence.",
+              "A short Hungarian note about register/formality or a natural alternative phrasing, one sentence. Shown in writing only, never spoken aloud.",
           },
         },
       },
       metaReplyHu: {
         type: "string",
         description:
-          "Only meaningful when turnType=meta_question: a brief Hungarian answer to the learner's question. Empty otherwise.",
+          "Only meaningful when turnType=meta_question: an OPTIONAL brief written Hungarian note, only if genuinely helpful alongside the English reply. Shown in writing only, never spoken aloud - the English reply must be sufficient on its own. Leave empty otherwise.",
       },
     },
     required: ["inputLanguage", "turnType", "reply", "correction"],

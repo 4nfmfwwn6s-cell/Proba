@@ -59,7 +59,10 @@ export interface GlobalKeySettings {
   hasOpenaiKey: boolean;
 }
 
-export type CorrectionSpeechLevel = "off" | "corrected_only" | "corrected_and_explanation";
+// "off": never speak the correction. "on": speak the corrected English
+// sentence (slowly) before the reply - the Hungarian explanation is never
+// spoken, only ever shown in writing under the learner's bubble.
+export type CorrectionSpeechLevel = "off" | "on";
 
 export type Starter = "user" | "app";
 
@@ -67,7 +70,6 @@ export type Starter = "user" | "app";
 export interface ProfileSettings extends GlobalKeySettings {
   ttsProvider: "browser" | "elevenlabs" | "openai";
   ttsVoice: string;
-  huTtsVoice: string;
   speechSpeed: number;
   explanationLanguage: "hu" | "en";
   correctionSpeechLevel: CorrectionSpeechLevel;
@@ -120,6 +122,5 @@ export const ERROR_TYPE_LABELS: Record<ErrorType, string> = {
 
 export const CORRECTION_SPEECH_LABELS: Record<CorrectionSpeechLevel, string> = {
   off: "Kikapcsolva",
-  corrected_only: "Csak a javított mondat felolvasása",
-  corrected_and_explanation: "Javított mondat + magyar magyarázat felolvasása",
+  on: "Javított mondat felolvasása (angolul)",
 };

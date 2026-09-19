@@ -23,7 +23,7 @@ db.exec(`
     hu_tts_voice TEXT NOT NULL DEFAULT '',
     speech_speed REAL NOT NULL DEFAULT 1.0,
     explanation_language TEXT NOT NULL DEFAULT 'hu',
-    correction_speech_level TEXT NOT NULL DEFAULT 'corrected_and_explanation',
+    correction_speech_level TEXT NOT NULL DEFAULT 'on',
     default_starter TEXT NOT NULL DEFAULT 'user',
     created_at TEXT NOT NULL
   );
@@ -59,11 +59,15 @@ function ensureColumn(table: string, column: string, ddl: string): void {
 
 ensureColumn("sessions", "profile_id", "profile_id INTEGER REFERENCES profiles(id)");
 ensureColumn("profiles", "hu_tts_voice", "hu_tts_voice TEXT NOT NULL DEFAULT ''");
-ensureColumn(
-  "profiles",
-  "correction_speech_level",
-  "correction_speech_level TEXT NOT NULL DEFAULT 'corrected_and_explanation'"
-);
+ensureColumn("profiles", "correction_speech_level", "correction_speech_level TEXT NOT NULL DEFAULT 'on'");
 ensureColumn("profiles", "default_starter", "default_starter TEXT NOT NULL DEFAULT 'user'");
 ensureColumn("turns", "turn_type", "turn_type TEXT");
 ensureColumn("turns", "translation_json", "translation_json TEXT");
+
+// One-time data migration: correction speech was simplified from three
+// levels (off / corrected_only / corrected_and_explanation) down to two
+// (off / on) - the Hungarian explanation is no longer ever spoken aloud, so
+// both "speak something" levels collapse into "on".
+db.exec(
+  "UPDATE profiles SET correction_speech_level = 'on' WHERE correction_speech_level IN ('corrected_only', 'corrected_and_explanation')"
+);

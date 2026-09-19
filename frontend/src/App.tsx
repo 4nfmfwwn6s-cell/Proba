@@ -117,7 +117,7 @@ export default function App() {
           { role: "assistant", content: buildAssistantHistoryText(result) },
         ];
 
-        const level = settingsRef.current?.correctionSpeechLevel ?? "corrected_and_explanation";
+        const level = settingsRef.current?.correctionSpeechLevel ?? "on";
         const baseSpeed = settingsRef.current?.speechSpeed ?? 1.0;
         const parts = buildSpokenSequenceForTurn(result, level, baseSpeed);
         void speakSequence(parts);

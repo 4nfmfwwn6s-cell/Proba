@@ -10,7 +10,6 @@ interface ProfileRow {
   name: string;
   tts_provider: TtsProvider;
   tts_voice: string;
-  hu_tts_voice: string;
   speech_speed: number;
   explanation_language: "hu" | "en";
   correction_speech_level: CorrectionSpeechLevel;
@@ -46,8 +45,8 @@ profilesRouter.post("/", (req, res) => {
   const info = db
     .prepare(
       `INSERT INTO profiles
-        (name, tts_provider, tts_voice, hu_tts_voice, speech_speed, explanation_language, correction_speech_level, default_starter, created_at)
-       VALUES (?, 'browser', '', '', 1.0, 'hu', 'corrected_and_explanation', 'user', ?)`
+        (name, tts_provider, tts_voice, speech_speed, explanation_language, correction_speech_level, default_starter, created_at)
+       VALUES (?, 'browser', '', 1.0, 'hu', 'on', 'user', ?)`
     )
     .run(name, now);
 
@@ -63,7 +62,6 @@ function profileSettingsPayload(profile: ProfileRow) {
     ...publicConfig(loadConfig()),
     ttsProvider: profile.tts_provider,
     ttsVoice: profile.tts_voice,
-    huTtsVoice: profile.hu_tts_voice,
     speechSpeed: profile.speech_speed,
     explanationLanguage: profile.explanation_language,
     correctionSpeechLevel: profile.correction_speech_level,
@@ -80,7 +78,6 @@ profilesRouter.get("/:id/settings", (req, res) => {
 const ALLOWED_PREFS = [
   "ttsProvider",
   "ttsVoice",
-  "huTtsVoice",
   "speechSpeed",
   "explanationLanguage",
   "correctionSpeechLevel",
@@ -89,7 +86,6 @@ const ALLOWED_PREFS = [
 const COLUMN_BY_PREF: Record<(typeof ALLOWED_PREFS)[number], string> = {
   ttsProvider: "tts_provider",
   ttsVoice: "tts_voice",
-  huTtsVoice: "hu_tts_voice",
   speechSpeed: "speech_speed",
   explanationLanguage: "explanation_language",
   correctionSpeechLevel: "correction_speech_level",

@@ -3,8 +3,6 @@ import { fetchTtsAudio } from "../api";
 import type { ProfileSettings } from "../types";
 import type { SpeechPart } from "../lib/correctionSpeech";
 
-const LANG_TAG: Record<SpeechPart["lang"], string> = { en: "en-US", hu: "hu-HU" };
-
 export function useSpeechSynthesis(settings: ProfileSettings | null) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -23,17 +21,15 @@ export function useSpeechSynthesis(settings: ProfileSettings | null) {
     };
   }, [browserSupported]);
 
-  const pickBrowserVoice = useCallback(
-    (lang: SpeechPart["lang"]): SpeechSynthesisVoice | undefined => {
-      const preferredName = lang === "hu" ? settings?.huTtsVoice : settings?.ttsVoice;
-      return (
-        voices.find((v) => v.name === preferredName) ??
-        voices.find((v) => v.lang.startsWith(lang) && v.localService) ??
-        voices.find((v) => v.lang.startsWith(lang))
-      );
-    },
-    [voices, settings?.huTtsVoice, settings?.ttsVoice]
-  );
+  // TTS only ever speaks English (corrections/translation notes/meta answers
+  // are written-only), so there's only ever one voice to pick.
+  const pickBrowserVoice = useCallback((): SpeechSynthesisVoice | undefined => {
+    return (
+      voices.find((v) => v.name === settings?.ttsVoice) ??
+      voices.find((v) => v.lang.startsWith("en") && v.localService) ??
+      voices.find((v) => v.lang.startsWith("en"))
+    );
+  }, [voices, settings?.ttsVoice]);
 
   // Speaks a single part with the browser voice, resolving once it's done
   // (never rejects, so a sequence keeps going even if one part fails).
@@ -45,9 +41,9 @@ export function useSpeechSynthesis(settings: ProfileSettings | null) {
           return;
         }
         const utterance = new SpeechSynthesisUtterance(part.text);
-        utterance.lang = LANG_TAG[part.lang];
+        utterance.lang = "en-US";
         utterance.rate = part.rate;
-        const voice = pickBrowserVoice(part.lang);
+        const voice = pickBrowserVoice();
         if (voice) utterance.voice = voice;
 
         utterance.onstart = () => setIsSpeaking(true);
@@ -63,9 +59,12 @@ export function useSpeechSynthesis(settings: ProfileSettings | null) {
     async (part: SpeechPart): Promise<void> => {
       if (cancelledRef.current) return;
       try {
-        const voice =
-          part.lang === "hu" ? settings?.huTtsVoice || settings?.ttsVoice || "" : (settings?.ttsVoice ?? "");
-        const blob = await fetchTtsAudio(part.text, part.rate, settings?.ttsProvider ?? "browser", voice);
+        const blob = await fetchTtsAudio(
+          part.text,
+          part.rate,
+          settings?.ttsProvider ?? "browser",
+          settings?.ttsVoice ?? ""
+        );
         if (cancelledRef.current) return;
 
         const url = URL.createObjectURL(blob);
@@ -88,12 +87,12 @@ export function useSpeechSynthesis(settings: ProfileSettings | null) {
         if (!cancelledRef.current) await speakPartWithBrowser(part);
       }
     },
-    [settings?.ttsProvider, settings?.ttsVoice, settings?.huTtsVoice, speakPartWithBrowser]
+    [settings?.ttsProvider, settings?.ttsVoice, speakPartWithBrowser]
   );
 
   // Speaks each part in order, waiting for one to finish before starting the
-  // next - so e.g. the corrected sentence, the Hungarian explanation, and the
-  // reply never overlap. stop() aborts the remaining parts of the sequence.
+  // next - so e.g. the corrected sentence and the reply never overlap.
+  // stop() aborts the remaining parts of the sequence.
   const speakSequence = useCallback(
     async (parts: SpeechPart[]) => {
       cancelledRef.current = false;
@@ -114,7 +113,7 @@ export function useSpeechSynthesis(settings: ProfileSettings | null) {
 
   const speak = useCallback(
     (text: string) => {
-      void speakSequence([{ text, lang: "en", rate: settings?.speechSpeed ?? 1.0 }]);
+      void speakSequence([{ text, rate: settings?.speechSpeed ?? 1.0 }]);
     },
     [speakSequence, settings?.speechSpeed]
   );

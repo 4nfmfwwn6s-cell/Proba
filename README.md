@@ -3,9 +3,10 @@
 A voice-based English conversation coach: press the mic once and just talk — through pauses, multiple
 sentences, hesitations, and switches between English and Hungarian — press it again when you're done, and the
 app transcribes your speech, Claude replies naturally and (separately) corrects your grammar/vocabulary/word
-order with a one-sentence Hungarian explanation, and reads both the correction and the reply back to you. Ask
-"Angolul hogy kell mondani...?" mid-conversation and it'll teach you the phrase instead of grading it as a
-mistake; ask "mit jelent ez?" and it'll answer briefly in Hungarian and steer you back to English.
+order with a one-sentence Hungarian explanation, and reads the corrected sentence and the reply back to you —
+always in English; the Hungarian explanation stays written-only, under your message. Ask "Angolul hogy kell
+mondani...?" mid-conversation and it'll teach you the phrase instead of grading it as a mistake; ask "mit jelent
+ez?" and it'll answer you in simple English (with a written Hungarian note if that helps) and keep going.
 
 ## Project structure
 
@@ -137,33 +138,33 @@ remembers them across reboots and app restarts.
   after a long pause, the app transparently restarts it behind the scenes and keeps appending to the same
   utterance, so you never notice a gap. A second tap stops listening — that's the only moment your message is
   sent to Claude and answered. Nothing is ever sent, and the app never replies, while the mic is on.
-- **Corrections are spoken, not just written.** When your turn had a mistake, before the conversational reply
-  the app says the corrected English sentence slowly and clearly, then (if enabled) the short Hungarian
-  explanation in a Hungarian voice, then continues with the normal English reply in the English voice — always
-  in that order, never overlapping. Control this in Settings → **Javítások felolvasása**, with three levels:
-  off / corrected sentence only / corrected sentence + Hungarian explanation (the last one is the default). Set
-  separate English and Hungarian voices there too.
+- **The corrected sentence is spoken, never the Hungarian explanation.** When your turn had a mistake, before
+  the conversational reply the app says the corrected English sentence slowly and clearly, then continues with
+  the normal reply — both always in English. The Hungarian explanation is never spoken aloud; it only ever
+  appears in writing under your message. Control this in Settings → **Javítások felolvasása**, with two levels:
+  off / on (speak the corrected sentence — the default).
 - **Either side can start.** On the start screen, choose whether you or the app speaks first. If the app
   starts, it greets you and/or asks an opening question that fits the chosen mode/scenario/level as soon as the
   session begins, out loud, then waits for you to turn the mic on. Your choice is saved as that profile's
   default for next time. In question-practice mode, the app always continues by asking the next question right
   after correcting your answer — you never have to prompt it.
-- **You can mix English and Hungarian in the same session.** The mic doesn't require you to pick a language
-  upfront — Claude reads your turn and classifies it every time:
+- **You can mix English and Hungarian in the same session — but the app only ever speaks English.** The mic
+  doesn't require you to pick a language upfront — Claude reads your turn and classifies it every time:
   - Spoke English? Handled exactly as above: a natural reply plus a correction if you made a mistake.
   - Asked in Hungarian how to say something in English (e.g. *"Angolul hogy kell mondani: sajnos nem tudok
     időben ott lenni?"*)? That's **not** graded as a mistake. Instead the app speaks the English sentence
-    slowly and clearly, adds a short Hungarian note on register or an alternative phrasing, and invites you to
-    say it back. These show up in the session summary as **"Kért kifejezések"** (phrases you asked for), and
-    feed into the vocabulary review list — never counted as errors.
+    slowly and clearly, adds a short **written** Hungarian note on register or an alternative phrasing, and
+    invites you to say it back. These show up in the session summary as **"Kért kifejezések"** (phrases you
+    asked for), and feed into the vocabulary review list — never counted as errors.
   - Said something else in Hungarian mid-conversation (e.g. *"mit jelent ez?"*, *"nem értem"*, *"mondd
-    lassabban"*)? The app answers briefly in Hungarian, then steers the conversation back to English (e.g. by
-    re-asking its previous question).
+    lassabban"*)? The spoken reply is still entirely in English — the app answers or rephrases at your level in
+    simple English and keeps the conversation going; any Hungarian help it adds is written-only, never spoken.
 
   Speech recognition itself still only understands one language per browser recognizer session, so the app
   hints the recognizer's language per (re)started segment from what it's heard so far (accented characters or
   recognizable Hungarian words switch it to `hu-HU`); the real classification — which of the three cases above
-  applies — is always done by Claude on the finished transcript, not by that hint.
+  applies — is always done by Claude on the finished transcript, not by that hint. Whatever language you speak
+  in, everything the app says out loud is English.
 
 ## Run the tests
 
@@ -194,11 +195,10 @@ scopes:
 
 **Per-profile** (stored in SQLite, one row per profile — each person can set their own):
 - **TTS provider** — `browser` (free, built-in Chrome/Edge voices), `elevenlabs`, or `openai`.
-- **English voice name / ElevenLabs voice ID** — optional override, used for replies and corrected sentences.
-- **Hungarian voice name / voice ID** — optional override, used when speaking the Hungarian correction explanation.
-- **Correction speech level** — off / corrected sentence only / corrected sentence + Hungarian explanation (default: the last one). Controls what gets spoken aloud before the reply on a turn with a mistake.
+- **Voice name / ElevenLabs voice ID** — optional override. There's only one voice, since the app only ever speaks English.
+- **Correction speech level** — off / on (default: on). When on, the corrected English sentence is spoken (slowly) before the reply on a turn with a mistake; the Hungarian explanation is never spoken, only shown in writing.
 - **Speech speed** — 0.5x–1.5x, applied to whichever TTS engine is active (the corrected sentence is always read back a bit slower than this for emphasis).
-- **Explanation language** — Hungarian (default) or English, for the one-line correction explanations.
+- **Explanation language** — Hungarian (default) or English, for the one-line **written** correction explanations.
 - **Who starts** — you or the app; chosen on the start screen and remembered as the default for next time.
 
 ## Notes on how corrections and bilingual turns work
@@ -221,9 +221,11 @@ returns strict JSON:
 `correction` is only ever populated for `turnType: "conversation"` — `null` there means your sentence was
 correct (shown as a green ✅). `translation` is only populated for `"translation_request"`, `metaReplyHu` only
 for `"meta_question"`; the server normalizes/drops mismatched fields regardless of what the model sends, so a
-confused response can never mislabel a translation request as a graded mistake. Corrections never leak into the
+confused response can never mislabel a translation request as a graded mistake. `reply` is always English and
+always what gets spoken aloud, for every turn type — `explanationHu`, `translation.hungarianNote`, and
+`metaReplyHu` are Hungarian and are only ever shown in writing, never spoken. Corrections never leak into the
 spoken reply — unless you explicitly type/say "explain" (or "magyarázd"), which lets the model explain inline
-as part of that turn's reply.
+as part of that turn's reply (still in English).
 
 ## Troubleshooting
 
@@ -231,7 +233,6 @@ as part of that turn's reply.
 - **Mic button says "A böngésződ nem támogatja a hangfelismerést"** — your browser doesn't support the Web Speech API. Use Chrome or Edge. If an OpenAI key is set in Settings, the app automatically falls back to recording audio and transcribing it via Whisper instead.
 - **"A mikrofon használatához engedélyt kell adnod"** — microphone permission was denied. Click the padlock/site-info icon in the address bar and allow microphone access for `localhost`, then reload.
 - **Corrections never show up / chat errors out** — check that an Anthropic API key is saved in Settings; the app will show a banner if it's missing.
-- **No Hungarian voice / the Hungarian explanation sounds wrong** — this depends on voices installed in your OS/browser. Windows usually ships at least one `hu-HU` voice (check *Settings → Time & Language → Speech* on Windows, or your browser's voice list); if none is found, the browser falls back to its default voice for that text. Using ElevenLabs or OpenAI TTS instead avoids this, since those support Hungarian regardless of installed system voices.
 - **The app never answers, even though I stopped talking** — remember the mic is a toggle now: tap it again to stop listening and send. It intentionally never replies while the mic is still on.
 
 ## Data storage

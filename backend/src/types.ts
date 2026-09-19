@@ -53,7 +53,10 @@ export interface AppConfig {
 
 export type TtsProvider = "browser" | "elevenlabs" | "openai";
 
-export type CorrectionSpeechLevel = "off" | "corrected_only" | "corrected_and_explanation";
+// "off": never speak the correction. "on": speak the corrected English
+// sentence (slowly) before the reply - the Hungarian explanation is never
+// spoken, only ever shown in writing under the learner's bubble.
+export type CorrectionSpeechLevel = "off" | "on";
 
 export type Starter = "user" | "app";
 
@@ -61,7 +64,6 @@ export type Starter = "user" | "app";
 export interface ProfilePrefs {
   ttsProvider: TtsProvider;
   ttsVoice: string;
-  huTtsVoice: string;
   speechSpeed: number;
   explanationLanguage: "hu" | "en";
   correctionSpeechLevel: CorrectionSpeechLevel;

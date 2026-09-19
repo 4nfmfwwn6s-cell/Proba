@@ -12,43 +12,35 @@ const ERROR_CORRECTION: Correction = {
 
 describe("buildSpokenSequence", () => {
   it("speaks only the reply when there was no correction, regardless of level", () => {
-    for (const level of ["off", "corrected_only", "corrected_and_explanation"] as const) {
+    for (const level of ["off", "on"] as const) {
       const parts = buildSpokenSequence("Nice to hear that!", null, level, 1.0);
-      expect(parts).toEqual([{ text: "Nice to hear that!", lang: "en", rate: 1.0 }]);
+      expect(parts).toEqual([{ text: "Nice to hear that!", rate: 1.0 }]);
     }
   });
 
   it("speaks only the reply when correction speech is off, even with a real correction", () => {
     const parts = buildSpokenSequence("Nice to hear that!", ERROR_CORRECTION, "off", 1.0);
-    expect(parts).toEqual([{ text: "Nice to hear that!", lang: "en", rate: 1.0 }]);
+    expect(parts).toEqual([{ text: "Nice to hear that!", rate: 1.0 }]);
   });
 
-  it("speaks the slowed corrected sentence then the reply at 'corrected_only'", () => {
-    const parts = buildSpokenSequence("Nice to hear that!", ERROR_CORRECTION, "corrected_only", 1.0);
+  it("speaks the slowed corrected sentence then the reply when 'on' - never the Hungarian explanation", () => {
+    const parts = buildSpokenSequence("Nice to hear that!", ERROR_CORRECTION, "on", 1.0);
     expect(parts).toEqual([
-      { text: "I went to school yesterday", lang: "en", rate: 0.8 },
-      { text: "Nice to hear that!", lang: "en", rate: 1.0 },
+      { text: "I went to school yesterday", rate: 0.8 },
+      { text: "Nice to hear that!", rate: 1.0 },
     ]);
-  });
-
-  it("speaks corrected sentence, then Hungarian explanation, then reply at 'corrected_and_explanation'", () => {
-    const parts = buildSpokenSequence("Nice to hear that!", ERROR_CORRECTION, "corrected_and_explanation", 1.0);
-    expect(parts).toEqual([
-      { text: "I went to school yesterday", lang: "en", rate: 0.8 },
-      { text: "Múlt időben 'went'-et kell használni.", lang: "hu", rate: 1.0 },
-      { text: "Nice to hear that!", lang: "en", rate: 1.0 },
-    ]);
+    expect(parts.some((p) => p.text.includes(ERROR_CORRECTION.explanationHu))).toBe(false);
   });
 
   it("scales the slow rate relative to the user's base speed", () => {
-    const parts = buildSpokenSequence("Reply", ERROR_CORRECTION, "corrected_only", 1.25);
+    const parts = buildSpokenSequence("Reply", ERROR_CORRECTION, "on", 1.25);
     expect(parts[0].rate).toBeCloseTo(1.0);
     expect(parts[1].rate).toBe(1.25);
   });
 });
 
 describe("buildSpokenSequenceForTurn", () => {
-  it("speaks the slowed English sentence, the Hungarian note, then the invite for a translation_request", () => {
+  it("speaks the slowed English sentence then the invite for a translation_request - never the Hungarian note", () => {
     const parts = buildSpokenSequenceForTurn(
       {
         reply: "Now you try saying it!",
@@ -60,17 +52,16 @@ describe("buildSpokenSequenceForTurn", () => {
         },
         metaReplyHu: null,
       },
-      "corrected_and_explanation",
+      "on",
       1.0
     );
     expect(parts).toEqual([
-      { text: "Unfortunately I can't be there on time.", lang: "en", rate: 0.8 },
-      { text: "Ez egy semleges hangvételű mondat.", lang: "hu", rate: 1.0 },
-      { text: "Now you try saying it!", lang: "en", rate: 1.0 },
+      { text: "Unfortunately I can't be there on time.", rate: 0.8 },
+      { text: "Now you try saying it!", rate: 1.0 },
     ]);
   });
 
-  it("is unaffected by correctionSpeechLevel for a translation_request (always speaks all parts)", () => {
+  it("is unaffected by correctionSpeechLevel for a translation_request (always speaks the sentence + invite)", () => {
     const parts = buildSpokenSequenceForTurn(
       {
         reply: "Now you try saying it!",
@@ -83,42 +74,35 @@ describe("buildSpokenSequenceForTurn", () => {
       1.0
     );
     expect(parts).toEqual([
-      { text: "Hello there.", lang: "en", rate: 0.8 },
-      { text: "Now you try saying it!", lang: "en", rate: 1.0 },
+      { text: "Hello there.", rate: 0.8 },
+      { text: "Now you try saying it!", rate: 1.0 },
     ]);
   });
 
-  it("skips an empty Hungarian note for a translation_request", () => {
+  it("speaks only the English reply for a meta_question - never metaReplyHu", () => {
     const parts = buildSpokenSequenceForTurn(
       {
-        reply: "Try it!",
-        correction: null,
-        turnType: "translation_request",
-        translation: { englishSentence: "Good morning.", hungarianNote: "" },
-        metaReplyHu: null,
-      },
-      "corrected_and_explanation",
-      1.0
-    );
-    expect(parts.map((p) => p.lang)).toEqual(["en", "en"]);
-  });
-
-  it("speaks the Hungarian answer then the English steer-back for a meta_question", () => {
-    const parts = buildSpokenSequenceForTurn(
-      {
-        reply: "Let's continue - what did you do this weekend?",
+        reply: "That word means 'unfortunately' - let's continue, what did you do this weekend?",
         correction: null,
         turnType: "meta_question",
         translation: null,
-        metaReplyHu: "Ez azt jelenti, hogy...",
+        metaReplyHu: "Ez azt jelenti, hogy sajnos.",
       },
-      "corrected_and_explanation",
+      "on",
       1.0
     );
     expect(parts).toEqual([
-      { text: "Ez azt jelenti, hogy...", lang: "hu", rate: 1.0 },
-      { text: "Let's continue - what did you do this weekend?", lang: "en", rate: 1.0 },
+      { text: "That word means 'unfortunately' - let's continue, what did you do this weekend?", rate: 1.0 },
     ]);
+  });
+
+  it("returns nothing for a meta_question with an empty reply", () => {
+    const parts = buildSpokenSequenceForTurn(
+      { reply: "", correction: null, turnType: "meta_question", translation: null, metaReplyHu: "x" },
+      "on",
+      1.0
+    );
+    expect(parts).toEqual([]);
   });
 
   it("falls back to buildSpokenSequence (correction-gated) for a conversation turn", () => {
@@ -130,21 +114,21 @@ describe("buildSpokenSequenceForTurn", () => {
         translation: null,
         metaReplyHu: null,
       },
-      "corrected_only",
+      "on",
       1.0
     );
     expect(parts).toEqual([
-      { text: "I went to school yesterday", lang: "en", rate: 0.8 },
-      { text: "Nice to hear that!", lang: "en", rate: 1.0 },
+      { text: "I went to school yesterday", rate: 0.8 },
+      { text: "Nice to hear that!", rate: 1.0 },
     ]);
   });
 
   it("falls back to just the reply for a translation_request with no translation data", () => {
     const parts = buildSpokenSequenceForTurn(
       { reply: "Sorry, let's continue.", correction: null, turnType: "translation_request", translation: null, metaReplyHu: null },
-      "corrected_and_explanation",
+      "on",
       1.0
     );
-    expect(parts).toEqual([{ text: "Sorry, let's continue.", lang: "en", rate: 1.0 }]);
+    expect(parts).toEqual([{ text: "Sorry, let's continue.", rate: 1.0 }]);
   });
 });
