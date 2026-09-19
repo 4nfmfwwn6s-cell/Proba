@@ -19,6 +19,15 @@ export interface Correction {
   errorType: ErrorType | null;
 }
 
+export type InputLanguage = "en" | "hu";
+
+export type TurnType = "conversation" | "translation_request" | "meta_question";
+
+export interface TranslationAnswer {
+  englishSentence: string;
+  hungarianNote: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -29,12 +38,19 @@ export interface ChatBubbleData {
   role: "user" | "assistant";
   content: string;
   correction?: Correction | null;
+  turnType?: TurnType;
+  translation?: TranslationAnswer | null;
+  metaReplyHu?: string | null;
   pending?: boolean;
 }
 
 export interface ChatTurnResult {
   reply: string;
   correction: Correction | null;
+  inputLanguage: InputLanguage;
+  turnType: TurnType;
+  translation: TranslationAnswer | null;
+  metaReplyHu: string | null;
 }
 
 export interface GlobalKeySettings {
@@ -63,10 +79,17 @@ export interface Profile {
   name: string;
 }
 
+export interface PhraseAsked {
+  question: string;
+  englishSentence: string;
+  hungarianNote: string;
+}
+
 export interface SessionSummary {
   totalMistakes: number;
   mistakesByType: Record<string, Correction[]>;
   vocabReview: string[];
+  phrasesAsked: PhraseAsked[];
 }
 
 export interface SessionListItem {

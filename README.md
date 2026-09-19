@@ -1,9 +1,11 @@
 # English Coach — spoken English practice for Hungarian speakers
 
 A voice-based English conversation coach: press the mic once and just talk — through pauses, multiple
-sentences, hesitations — press it again when you're done, and the app transcribes your speech, Claude replies
-naturally and (separately) corrects your grammar/vocabulary/word order with a one-sentence Hungarian
-explanation, and reads both the correction and the reply back to you.
+sentences, hesitations, and switches between English and Hungarian — press it again when you're done, and the
+app transcribes your speech, Claude replies naturally and (separately) corrects your grammar/vocabulary/word
+order with a one-sentence Hungarian explanation, and reads both the correction and the reply back to you. Ask
+"Angolul hogy kell mondani...?" mid-conversation and it'll teach you the phrase instead of grading it as a
+mistake; ask "mit jelent ez?" and it'll answer briefly in Hungarian and steer you back to English.
 
 ## Project structure
 
@@ -146,12 +148,29 @@ remembers them across reboots and app restarts.
   session begins, out loud, then waits for you to turn the mic on. Your choice is saved as that profile's
   default for next time. In question-practice mode, the app always continues by asking the next question right
   after correcting your answer — you never have to prompt it.
+- **You can mix English and Hungarian in the same session.** The mic doesn't require you to pick a language
+  upfront — Claude reads your turn and classifies it every time:
+  - Spoke English? Handled exactly as above: a natural reply plus a correction if you made a mistake.
+  - Asked in Hungarian how to say something in English (e.g. *"Angolul hogy kell mondani: sajnos nem tudok
+    időben ott lenni?"*)? That's **not** graded as a mistake. Instead the app speaks the English sentence
+    slowly and clearly, adds a short Hungarian note on register or an alternative phrasing, and invites you to
+    say it back. These show up in the session summary as **"Kért kifejezések"** (phrases you asked for), and
+    feed into the vocabulary review list — never counted as errors.
+  - Said something else in Hungarian mid-conversation (e.g. *"mit jelent ez?"*, *"nem értem"*, *"mondd
+    lassabban"*)? The app answers briefly in Hungarian, then steers the conversation back to English (e.g. by
+    re-asking its previous question).
+
+  Speech recognition itself still only understands one language per browser recognizer session, so the app
+  hints the recognizer's language per (re)started segment from what it's heard so far (accented characters or
+  recognizable Hungarian words switch it to `hu-HU`); the real classification — which of the three cases above
+  applies — is always done by Claude on the finished transcript, not by that hint.
 
 ## Run the tests
 
-The correction-parsing logic (`backend/src/lib/correctionParser.ts`) has a full backend unit-test suite, and the
-pure frontend logic (transcript-segment merging for the continuous mic, the spoken-correction sequencing, and
-elapsed-time formatting) has its own frontend suite:
+The correction-parsing logic (`backend/src/lib/correctionParser.ts`, including the bilingual turnType/translation/
+meta-question gating) has a full backend unit-test suite, and the pure frontend logic (transcript-segment merging
+for the continuous mic, the Hungarian-language heuristic, the turnType-aware spoken-sequence builder, the
+assistant-history composer, and elapsed-time formatting) has its own frontend suite:
 
 ```powershell
 cd backend
@@ -182,13 +201,29 @@ scopes:
 - **Explanation language** — Hungarian (default) or English, for the one-line correction explanations.
 - **Who starts** — you or the app; chosen on the start screen and remembered as the default for next time.
 
-## Notes on how corrections work
+## Notes on how corrections and bilingual turns work
 
 Every user turn is sent to Claude with a forced tool call (`respond_with_correction`), so the model always
-returns strict JSON: `{ reply, correction }`. `correction` is `null` when your sentence was correct (shown as a
-green ✅), or `{ original, corrected, explanationHu, errorType }` when there's a mistake. Corrections never leak
-into the spoken reply — unless you explicitly type/say "explain" (or "magyarázd"), which lets the model explain
-inline as part of that turn's reply.
+returns strict JSON:
+
+```
+{
+  reply: string,
+  correction: { original, corrected, explanationHu, errorType } | null,
+  inputLanguage: "en" | "hu",
+  turnType: "conversation" | "translation_request" | "meta_question",
+  translation: { englishSentence, hungarianNote } | null,
+  metaReplyHu: string | null
+}
+```
+
+`inputLanguage` and `turnType` are Claude's classification of your turn (not a client-side heuristic).
+`correction` is only ever populated for `turnType: "conversation"` — `null` there means your sentence was
+correct (shown as a green ✅). `translation` is only populated for `"translation_request"`, `metaReplyHu` only
+for `"meta_question"`; the server normalizes/drops mismatched fields regardless of what the model sends, so a
+confused response can never mislabel a translation request as a graded mistake. Corrections never leak into the
+spoken reply — unless you explicitly type/say "explain" (or "magyarázd"), which lets the model explain inline
+as part of that turn's reply.
 
 ## Troubleshooting
 

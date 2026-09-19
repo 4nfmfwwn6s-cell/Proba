@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { transcribeAudio } from "../api";
 import { appendTranscriptSegment } from "../lib/transcriptMerge";
+import { looksHungarian } from "../lib/languageHeuristic";
 
 // Minimal typings for the (still non-standard) Web Speech API, which isn't
 // part of the default TS DOM lib.
@@ -80,6 +81,9 @@ export function useSpeechRecognition({ onResult, onError }: UseSpeechRecognition
   // transparently start a fresh recognizer session instead of stopping.
   const shouldListenRef = useRef(false);
   const finalTranscriptRef = useRef("");
+  // Last non-empty interim (not-yet-final) text seen, used only to pick a
+  // language hint for the next recognizer restart - see startWebSpeechSession.
+  const lastInterimRef = useRef("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -118,7 +122,13 @@ export function useSpeechRecognition({ onResult, onError }: UseSpeechRecognition
   const startWebSpeechSession = useCallback(() => {
     if (!RecognitionCtor) return;
     const recognition = new RecognitionCtor();
-    recognition.lang = "en-US";
+    // The Web Speech API only takes one recognizer language per session, so
+    // true simultaneous bilingual recognition isn't possible - instead, hint
+    // the language for each (re)started segment from whatever's accumulated
+    // so far, so a mid-utterance switch to Hungarian is picked up on restart.
+    recognition.lang = looksHungarian(`${finalTranscriptRef.current} ${lastInterimRef.current}`)
+      ? "hu-HU"
+      : "en-US";
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -134,6 +144,7 @@ export function useSpeechRecognition({ onResult, onError }: UseSpeechRecognition
           interim += transcript;
         }
       }
+      if (interim) lastInterimRef.current = interim;
       setPartialTranscript(interim);
     };
 
@@ -184,6 +195,7 @@ export function useSpeechRecognition({ onResult, onError }: UseSpeechRecognition
     if (!RecognitionCtor) return;
     shouldListenRef.current = true;
     finalTranscriptRef.current = "";
+    lastInterimRef.current = "";
     setPartialTranscript("");
     setIsListening(true);
     startTimer();

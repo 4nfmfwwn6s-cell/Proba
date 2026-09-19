@@ -1,4 +1,4 @@
-import type { Correction, ErrorType } from "../types.js";
+import type { ChatTurnResult, Correction, ErrorType, InputLanguage, TranslationAnswer, TurnType } from "../types.js";
 
 const VALID_ERROR_TYPES: ErrorType[] = [
   "grammar",
@@ -8,8 +8,19 @@ const VALID_ERROR_TYPES: ErrorType[] = [
   "other",
 ];
 
+const VALID_TURN_TYPES: TurnType[] = ["conversation", "translation_request", "meta_question"];
+const VALID_INPUT_LANGUAGES: InputLanguage[] = ["en", "hu"];
+
 function isValidErrorType(value: unknown): value is ErrorType {
   return typeof value === "string" && (VALID_ERROR_TYPES as string[]).includes(value);
+}
+
+function isValidTurnType(value: unknown): value is TurnType {
+  return typeof value === "string" && (VALID_TURN_TYPES as string[]).includes(value);
+}
+
+function isValidInputLanguage(value: unknown): value is InputLanguage {
+  return typeof value === "string" && (VALID_INPUT_LANGUAGES as string[]).includes(value);
 }
 
 function asTrimmedString(value: unknown): string {
@@ -49,35 +60,61 @@ export function normalizeCorrection(raw: unknown): Correction | null {
   };
 }
 
-export interface RawModelOutput {
-  reply?: unknown;
-  correction?: unknown;
+/**
+ * Normalizes a raw translation-answer object into a strict TranslationAnswer,
+ * or null if there's no usable English sentence in it.
+ */
+export function normalizeTranslation(raw: unknown): TranslationAnswer | null {
+  if (raw === null || raw === undefined || typeof raw !== "object") return null;
+
+  const obj = raw as Record<string, unknown>;
+  const englishSentence = asTrimmedString(obj.englishSentence);
+  const hungarianNote = asTrimmedString(obj.hungarianNote);
+
+  if (!englishSentence) return null;
+
+  return { englishSentence, hungarianNote };
 }
 
-export interface ParsedChatResult {
-  reply: string;
-  correction: Correction | null;
-}
+export type ParsedChatResult = ChatTurnResult;
 
-const FALLBACK_REPLY =
-  "Sorry, I had trouble understanding that. Could you say it again?";
+const FALLBACK_RESULT: ParsedChatResult = {
+  reply: "Sorry, I had trouble understanding that. Could you say it again?",
+  correction: null,
+  inputLanguage: "en",
+  turnType: "conversation",
+  translation: null,
+  metaReplyHu: null,
+};
 
 /**
  * Parses/validates the raw JSON object produced by the LLM (tool-use input,
  * or a JSON.parse of text output) into a safe ParsedChatResult. Never
  * throws: malformed input degrades to a safe fallback reply with no
  * correction, so a bad model response never crashes the conversation loop.
+ *
+ * Fields are gated by turnType: correction only applies to "conversation",
+ * translation only to "translation_request", and metaReplyHu only to
+ * "meta_question" - any mismatched data from the model is dropped rather
+ * than trusted, so a confused model response can't corrupt the session
+ * summary (e.g. a "mistake" logged for a Hungarian translation request).
  */
 export function parseChatResult(raw: unknown): ParsedChatResult {
   if (raw === null || raw === undefined || typeof raw !== "object") {
-    return { reply: FALLBACK_REPLY, correction: null };
+    return { ...FALLBACK_RESULT };
   }
 
-  const obj = raw as RawModelOutput;
-  const reply = asTrimmedString(obj.reply) || FALLBACK_REPLY;
-  const correction = normalizeCorrection(obj.correction);
+  const obj = raw as Record<string, unknown>;
+  const reply = asTrimmedString(obj.reply) || FALLBACK_RESULT.reply;
+  const inputLanguage = isValidInputLanguage(obj.inputLanguage) ? obj.inputLanguage : "en";
+  const turnType = isValidTurnType(obj.turnType) ? obj.turnType : "conversation";
 
-  return { reply, correction };
+  const correction = turnType === "conversation" ? normalizeCorrection(obj.correction) : null;
+  const translation = turnType === "translation_request" ? normalizeTranslation(obj.translation) : null;
+  const metaReplyHuRaw = turnType === "meta_question" ? asTrimmedString(obj.metaReplyHu) : "";
+  const metaReplyHu = metaReplyHuRaw || null;
+
+  return { reply, correction, inputLanguage, turnType, translation, metaReplyHu };
 }
 
 /**
@@ -90,6 +127,6 @@ export function parseChatResultFromString(jsonText: string): ParsedChatResult {
     const parsed = JSON.parse(jsonText);
     return parseChatResult(parsed);
   } catch {
-    return { reply: FALLBACK_REPLY, correction: null };
+    return { ...FALLBACK_RESULT };
   }
 }

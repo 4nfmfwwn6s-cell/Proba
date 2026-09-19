@@ -18,6 +18,23 @@ export function SessionSummary({ summary, onDone, doneLabel = "Új beszélgetés
         <div className="summary-stat">{summary.totalMistakes}</div>
       </div>
 
+      {summary.phrasesAsked.length > 0 && (
+        <div className="summary-card">
+          <div className="section-title">Kért kifejezések ({summary.phrasesAsked.length})</div>
+          {summary.phrasesAsked.map((p, idx) => (
+            <div className="mistake-item" key={idx}>
+              <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{p.question}</div>
+              <span className="correction-box-inline">
+                → <strong>{p.englishSentence}</strong>
+              </span>
+              {p.hungarianNote && (
+                <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>{p.hungarianNote}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {types.length > 0 && (
         <div className="summary-card">
           <div className="section-title">Hibák típus szerint</div>

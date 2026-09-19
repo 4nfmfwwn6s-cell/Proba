@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeCorrection,
+  normalizeTranslation,
   parseChatResult,
   parseChatResultFromString,
 } from "../src/lib/correctionParser.js";
@@ -216,5 +217,119 @@ describe("parseChatResultFromString", () => {
   it("degrades gracefully on an empty string", () => {
     const result = parseChatResultFromString("");
     expect(result.correction).toBeNull();
+  });
+});
+
+describe("normalizeTranslation", () => {
+  it("returns null for null/undefined/non-object input", () => {
+    expect(normalizeTranslation(null)).toBeNull();
+    expect(normalizeTranslation(undefined)).toBeNull();
+    expect(normalizeTranslation("not an object")).toBeNull();
+  });
+
+  it("returns null when englishSentence is missing or blank", () => {
+    expect(normalizeTranslation({ englishSentence: "", hungarianNote: "x" })).toBeNull();
+    expect(normalizeTranslation({ englishSentence: "   ", hungarianNote: "x" })).toBeNull();
+    expect(normalizeTranslation({ hungarianNote: "x" })).toBeNull();
+  });
+
+  it("normalizes and trims a valid translation answer", () => {
+    const result = normalizeTranslation({
+      englishSentence: "  Unfortunately I can't be there on time.  ",
+      hungarianNote: "  Ez egy semleges hangvételű mondat.  ",
+    });
+    expect(result).toEqual({
+      englishSentence: "Unfortunately I can't be there on time.",
+      hungarianNote: "Ez egy semleges hangvételű mondat.",
+    });
+  });
+
+  it("allows an empty hungarianNote", () => {
+    const result = normalizeTranslation({ englishSentence: "Hello there." });
+    expect(result).toEqual({ englishSentence: "Hello there.", hungarianNote: "" });
+  });
+});
+
+describe("parseChatResult - turnType gating", () => {
+  it("defaults to turnType=conversation and inputLanguage=en when omitted", () => {
+    const result = parseChatResult({ reply: "Nice!", correction: { hasError: false } });
+    expect(result.turnType).toBe("conversation");
+    expect(result.inputLanguage).toBe("en");
+    expect(result.translation).toBeNull();
+    expect(result.metaReplyHu).toBeNull();
+  });
+
+  it("parses a translation_request turn and ignores correction on it", () => {
+    const result = parseChatResult({
+      inputLanguage: "hu",
+      turnType: "translation_request",
+      reply: "Now you try saying it!",
+      correction: { hasError: true, original: "x", corrected: "y", errorType: "grammar" },
+      translation: {
+        englishSentence: "Unfortunately I can't be there on time.",
+        hungarianNote: "Ez egy formális változat.",
+      },
+    });
+    expect(result.turnType).toBe("translation_request");
+    expect(result.inputLanguage).toBe("hu");
+    expect(result.correction).toBeNull();
+    expect(result.translation).toEqual({
+      englishSentence: "Unfortunately I can't be there on time.",
+      hungarianNote: "Ez egy formális változat.",
+    });
+    expect(result.metaReplyHu).toBeNull();
+  });
+
+  it("drops translation data when turnType is not translation_request", () => {
+    const result = parseChatResult({
+      turnType: "conversation",
+      reply: "Let's continue.",
+      correction: { hasError: false },
+      translation: { englishSentence: "Should be ignored." },
+    });
+    expect(result.translation).toBeNull();
+  });
+
+  it("parses a meta_question turn and ignores correction/translation on it", () => {
+    const result = parseChatResult({
+      inputLanguage: "hu",
+      turnType: "meta_question",
+      reply: "Let's continue - what did you do this weekend?",
+      correction: { hasError: true, original: "x", corrected: "y" },
+      metaReplyHu: "Ez azt jelenti, hogy...",
+    });
+    expect(result.turnType).toBe("meta_question");
+    expect(result.correction).toBeNull();
+    expect(result.translation).toBeNull();
+    expect(result.metaReplyHu).toBe("Ez azt jelenti, hogy...");
+  });
+
+  it("falls back to null metaReplyHu when blank or turnType mismatched", () => {
+    expect(parseChatResult({ turnType: "meta_question", reply: "x", metaReplyHu: "" }).metaReplyHu).toBeNull();
+    expect(
+      parseChatResult({ turnType: "conversation", reply: "x", metaReplyHu: "should be ignored" }).metaReplyHu
+    ).toBeNull();
+  });
+
+  it("falls back to turnType=conversation for an invalid/unknown turnType value", () => {
+    const result = parseChatResult({ turnType: "something_else", reply: "Hi", correction: { hasError: false } });
+    expect(result.turnType).toBe("conversation");
+  });
+
+  it("falls back to inputLanguage=en for an invalid value", () => {
+    const result = parseChatResult({ inputLanguage: "de", reply: "Hi", correction: { hasError: false } });
+    expect(result.inputLanguage).toBe("en");
+  });
+
+  it("total garbage input still returns a fully-shaped fallback result", () => {
+    const result = parseChatResult("garbage");
+    expect(result).toEqual({
+      reply: expect.any(String),
+      correction: null,
+      inputLanguage: "en",
+      turnType: "conversation",
+      translation: null,
+      metaReplyHu: null,
+    });
   });
 });

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../db.js";
 import { loadConfig } from "../config.js";
 import { getChatCompletion, getOpeningReply } from "../lib/anthropic.js";
-import type { ChatMessage, ConversationMode, Difficulty } from "../types.js";
+import type { ChatMessage, ChatTurnResult, ConversationMode, Difficulty } from "../types.js";
 
 export const chatRouter = Router();
 
@@ -10,6 +10,20 @@ interface SessionRow {
   id: number;
   mode: ConversationMode;
   difficulty: Difficulty;
+}
+
+// Composes a display-friendly assistant turn (used for the session-history
+// view), since translation_request/meta_question turns carry extra spoken
+// parts beyond "reply" that a plain-text turns.content column doesn't model.
+function buildAssistantDisplayContent(result: ChatTurnResult): string {
+  if (result.turnType === "translation_request" && result.translation) {
+    const note = result.translation.hungarianNote ? `\n(${result.translation.hungarianNote})` : "";
+    return `${result.translation.englishSentence}${note}\n${result.reply}`;
+  }
+  if (result.turnType === "meta_question" && result.metaReplyHu) {
+    return `${result.metaReplyHu}\n${result.reply}`;
+  }
+  return result.reply;
 }
 
 chatRouter.post("/", async (req, res) => {
@@ -42,12 +56,21 @@ chatRouter.post("/", async (req, res) => {
     const now = new Date().toISOString();
 
     db.prepare(
-      "INSERT INTO turns (session_id, role, content, correction_json, created_at) VALUES (?, 'user', ?, ?, ?)"
-    ).run(sessionId, lastMessage.content, result.correction ? JSON.stringify(result.correction) : null, now);
+      `INSERT INTO turns (session_id, role, content, correction_json, turn_type, translation_json, created_at)
+       VALUES (?, 'user', ?, ?, ?, ?, ?)`
+    ).run(
+      sessionId,
+      lastMessage.content,
+      result.correction ? JSON.stringify(result.correction) : null,
+      result.turnType,
+      result.translation ? JSON.stringify(result.translation) : null,
+      now
+    );
 
     db.prepare(
-      "INSERT INTO turns (session_id, role, content, correction_json, created_at) VALUES (?, 'assistant', ?, NULL, ?)"
-    ).run(sessionId, result.reply, now);
+      `INSERT INTO turns (session_id, role, content, correction_json, turn_type, translation_json, created_at)
+       VALUES (?, 'assistant', ?, NULL, NULL, NULL, ?)`
+    ).run(sessionId, buildAssistantDisplayContent(result), now);
 
     res.json(result);
   } catch (err) {
@@ -86,7 +109,8 @@ chatRouter.post("/opening", async (req, res) => {
     const now = new Date().toISOString();
 
     db.prepare(
-      "INSERT INTO turns (session_id, role, content, correction_json, created_at) VALUES (?, 'assistant', ?, NULL, ?)"
+      `INSERT INTO turns (session_id, role, content, correction_json, turn_type, translation_json, created_at)
+       VALUES (?, 'assistant', ?, NULL, NULL, NULL, ?)`
     ).run(sessionId, result.reply, now);
 
     res.json(result);

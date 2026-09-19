@@ -43,6 +43,8 @@ db.exec(`
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     correction_json TEXT,
+    turn_type TEXT,
+    translation_json TEXT,
     created_at TEXT NOT NULL
   );
 `);
@@ -63,3 +65,5 @@ ensureColumn(
   "correction_speech_level TEXT NOT NULL DEFAULT 'corrected_and_explanation'"
 );
 ensureColumn("profiles", "default_starter", "default_starter TEXT NOT NULL DEFAULT 'user'");
+ensureColumn("turns", "turn_type", "turn_type TEXT");
+ensureColumn("turns", "translation_json", "translation_json TEXT");

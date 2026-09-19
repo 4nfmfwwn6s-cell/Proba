@@ -288,6 +288,32 @@ body {
   font-size: 1.1rem;
 }
 
+.turn-type-badge {
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: #eef0f7;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.translation-english {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.translation-note {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.translation-invite {
+  margin-top: 8px;
+  font-size: 0.95rem;
+}
+
 .mic-area {
   display: flex;
   flex-direction: column;

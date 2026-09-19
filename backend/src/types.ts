@@ -24,9 +24,24 @@ export interface Correction {
   errorType: ErrorType | null;
 }
 
+export type InputLanguage = "en" | "hu";
+
+export type TurnType = "conversation" | "translation_request" | "meta_question";
+
+export interface TranslationAnswer {
+  englishSentence: string;
+  hungarianNote: string;
+}
+
 export interface ChatTurnResult {
   reply: string;
   correction: Correction | null;
+  inputLanguage: InputLanguage;
+  turnType: TurnType;
+  // Only set when turnType === "translation_request".
+  translation: TranslationAnswer | null;
+  // Only set when turnType === "meta_question".
+  metaReplyHu: string | null;
 }
 
 // Shared secrets/config, global across all profiles (never sent to the browser).

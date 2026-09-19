@@ -8,17 +8,29 @@ const MODEL = "claude-sonnet-5";
 const CORRECTION_TOOL = {
   name: "respond_with_correction",
   description:
-    "Respond to the learner with a natural conversational reply and a separate grammar/vocabulary correction assessment of their last message.",
+    "Respond to the learner's turn: classify the input language and turn type, then give the appropriate response - a conversational reply with a grammar correction, an English translation answer, or a brief Hungarian meta-answer that steers back to English.",
   input_schema: {
     type: "object" as const,
     properties: {
+      inputLanguage: {
+        type: "string",
+        enum: ["en", "hu"],
+        description: "The language the learner's last message was actually written/spoken in.",
+      },
+      turnType: {
+        type: "string",
+        enum: ["conversation", "translation_request", "meta_question"],
+        description:
+          "conversation: the learner spoke English as part of the conversation. translation_request: the learner asked in Hungarian how to say a specific phrase in English (e.g. 'Angolul hogy kell mondani...'). meta_question: the learner said something else in Hungarian mid-conversation, not a specific translation request (e.g. 'mit jelent ez?', 'nem értem', 'mondd lassabban').",
+      },
       reply: {
         type: "string",
         description:
-          "The natural spoken conversational reply, continuing the conversation. Never mentions grammar or corrections.",
+          "For turnType=conversation: the natural spoken English conversational reply, continuing the conversation, never mentioning grammar or corrections. For turnType=translation_request: a short English invitation for the learner to try saying the sentence themselves. For turnType=meta_question: a short English phrase that steers the conversation back on track.",
       },
       correction: {
         type: "object",
+        description: "Only meaningful when turnType=conversation; ignored for the other turn types.",
         properties: {
           hasError: {
             type: "boolean",
@@ -44,8 +56,28 @@ const CORRECTION_TOOL = {
         },
         required: ["hasError"],
       },
+      translation: {
+        type: "object",
+        description: "Only present when turnType=translation_request; omit/leave empty otherwise.",
+        properties: {
+          englishSentence: {
+            type: "string",
+            description: "The natural, correct English translation of what the learner asked how to say.",
+          },
+          hungarianNote: {
+            type: "string",
+            description:
+              "A short Hungarian note about register/formality or a natural alternative phrasing, one sentence.",
+          },
+        },
+      },
+      metaReplyHu: {
+        type: "string",
+        description:
+          "Only meaningful when turnType=meta_question: a brief Hungarian answer to the learner's question. Empty otherwise.",
+      },
     },
-    required: ["reply", "correction"],
+    required: ["inputLanguage", "turnType", "reply", "correction"],
   },
 };
 
@@ -67,7 +99,14 @@ async function callWithCorrectionTool(
 
   const toolUse = response.content.find((block) => block.type === "tool_use");
   if (!toolUse || toolUse.type !== "tool_use") {
-    return { reply: "Sorry, I had trouble responding. Could you try again?", correction: null };
+    return {
+      reply: "Sorry, I had trouble responding. Could you try again?",
+      correction: null,
+      inputLanguage: "en",
+      turnType: "conversation",
+      translation: null,
+      metaReplyHu: null,
+    };
   }
 
   return parseChatResult(toolUse.input);
@@ -90,7 +129,8 @@ export async function getChatCompletion(
 }
 
 // Generates the AI's opening line for sessions where the app speaks first -
-// there is no real learner message yet, so the correction is always null.
+// there is no real learner message yet, so it's always a plain English
+// conversation turn with no correction/translation/meta-answer.
 export async function getOpeningReply(
   apiKey: string,
   mode: ConversationMode,
@@ -104,5 +144,12 @@ export async function getOpeningReply(
   const kickoff: ChatMessage[] = [{ role: "user", content: "[SYSTEM: Start the conversation now.]" }];
 
   const result = await callWithCorrectionTool(apiKey, system, kickoff);
-  return { reply: result.reply, correction: null };
+  return {
+    reply: result.reply,
+    correction: null,
+    inputLanguage: "en",
+    turnType: "conversation",
+    translation: null,
+    metaReplyHu: null,
+  };
 }

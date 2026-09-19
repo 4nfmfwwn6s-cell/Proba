@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.js";
-import type { Correction, ConversationMode, Difficulty, ErrorType } from "../types.js";
+import type { Correction, ConversationMode, Difficulty, ErrorType, TranslationAnswer, TurnType } from "../types.js";
 
 export const sessionsRouter = Router();
 
@@ -19,6 +19,8 @@ interface TurnRow {
   role: "user" | "assistant";
   content: string;
   correction_json: string | null;
+  turn_type: TurnType | null;
+  translation_json: string | null;
   created_at: string;
 }
 
@@ -64,9 +66,16 @@ sessionsRouter.get("/", (req, res) => {
   );
 });
 
+interface PhraseAsked {
+  question: string;
+  englishSentence: string;
+  hungarianNote: string;
+}
+
 function buildSummary(turns: TurnRow[]) {
   const mistakesByType: Record<string, Correction[]> = {};
   const corrections: Correction[] = [];
+  const phrasesAsked: PhraseAsked[] = [];
 
   for (const turn of turns) {
     if (turn.correction_json) {
@@ -76,25 +85,38 @@ function buildSummary(turns: TurnRow[]) {
       if (!mistakesByType[type]) mistakesByType[type] = [];
       mistakesByType[type].push(correction);
     }
+    if (turn.turn_type === "translation_request" && turn.translation_json) {
+      const translation = JSON.parse(turn.translation_json) as TranslationAnswer;
+      phrasesAsked.push({
+        question: turn.content,
+        englishSentence: translation.englishSentence,
+        hungarianNote: translation.hungarianNote,
+      });
+    }
   }
 
-  const vocabReview = corrections
-    .filter((c) => c.errorType === "vocabulary")
-    .slice(0, 5)
-    .map((c) => c.corrected);
-
-  // Pad with other corrected forms if fewer than 5 vocab items were found.
-  if (vocabReview.length < 5) {
-    for (const c of corrections) {
-      if (vocabReview.length >= 5) break;
-      if (!vocabReview.includes(c.corrected)) vocabReview.push(c.corrected);
-    }
+  // Vocabulary to review: phrases the learner explicitly asked how to say
+  // come first (they asked for a reason), then vocabulary-error corrections,
+  // then any other corrected forms, capped at 5.
+  const vocabReview: string[] = [];
+  for (const p of phrasesAsked) {
+    if (vocabReview.length >= 5) break;
+    if (!vocabReview.includes(p.englishSentence)) vocabReview.push(p.englishSentence);
+  }
+  for (const c of corrections.filter((c) => c.errorType === "vocabulary")) {
+    if (vocabReview.length >= 5) break;
+    if (!vocabReview.includes(c.corrected)) vocabReview.push(c.corrected);
+  }
+  for (const c of corrections) {
+    if (vocabReview.length >= 5) break;
+    if (!vocabReview.includes(c.corrected)) vocabReview.push(c.corrected);
   }
 
   return {
     totalMistakes: corrections.length,
     mistakesByType,
     vocabReview: vocabReview.slice(0, 5),
+    phrasesAsked,
   };
 }
 
@@ -122,6 +144,8 @@ sessionsRouter.get("/:id", (req, res) => {
       role: t.role,
       content: t.content,
       correction: t.correction_json ? JSON.parse(t.correction_json) : null,
+      turnType: t.turn_type ?? "conversation",
+      translation: t.translation_json ? JSON.parse(t.translation_json) : null,
       createdAt: t.created_at,
     })),
     summary: buildSummary(turns),

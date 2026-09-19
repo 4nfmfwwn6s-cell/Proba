@@ -7,7 +7,8 @@ import { SessionSummary } from "./components/SessionSummary";
 import { ProfileSelect } from "./components/ProfileSelect";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "./hooks/useSpeechSynthesis";
-import { buildSpokenSequence } from "./lib/correctionSpeech";
+import { buildSpokenSequenceForTurn } from "./lib/correctionSpeech";
+import { buildAssistantHistoryText } from "./lib/turnDisplay";
 import { formatElapsed } from "./lib/format";
 import {
   createSession,
@@ -95,15 +96,30 @@ export default function App() {
       try {
         const result = await sendChatTurn(sessionId, nextHistory);
         setBubbles((prev) =>
-          prev.map((b) => (b.id === userBubbleId ? { ...b, correction: result.correction } : b))
+          prev.map((b) =>
+            b.id === userBubbleId ? { ...b, correction: result.correction, turnType: result.turnType } : b
+          )
         );
         const assistantBubbleId = `a-${Date.now()}`;
-        setBubbles((prev) => [...prev, { id: assistantBubbleId, role: "assistant", content: result.reply }]);
-        historyRef.current = [...historyRef.current, { role: "assistant", content: result.reply }];
+        setBubbles((prev) => [
+          ...prev,
+          {
+            id: assistantBubbleId,
+            role: "assistant",
+            content: result.reply,
+            turnType: result.turnType,
+            translation: result.translation,
+            metaReplyHu: result.metaReplyHu,
+          },
+        ]);
+        historyRef.current = [
+          ...historyRef.current,
+          { role: "assistant", content: buildAssistantHistoryText(result) },
+        ];
 
         const level = settingsRef.current?.correctionSpeechLevel ?? "corrected_and_explanation";
         const baseSpeed = settingsRef.current?.speechSpeed ?? 1.0;
-        const parts = buildSpokenSequence(result.reply, result.correction, level, baseSpeed);
+        const parts = buildSpokenSequenceForTurn(result, level, baseSpeed);
         void speakSequence(parts);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Hiba történt a válasz lekérésekor.");
