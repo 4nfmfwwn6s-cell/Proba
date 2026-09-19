@@ -322,6 +322,39 @@ body {
   padding: 12px 0 4px;
 }
 
+.mic-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.lang-switch {
+  display: flex;
+  border-radius: 999px;
+  border: 2px solid #d9deee;
+  overflow: hidden;
+}
+
+.lang-switch-btn {
+  background: var(--surface);
+  color: var(--muted);
+  border: none;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lang-switch-btn.selected {
+  background: var(--primary);
+  color: white;
+}
+
+.lang-switch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .mic-button {
   width: 88px;
   height: 88px;

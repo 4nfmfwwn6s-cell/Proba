@@ -65,10 +65,12 @@ Then open **http://localhost:5173** in Chrome or Edge.
    (API keys are shared across all profiles; each profile only keeps its own voice/speed/language preferences.)
 3. Go back, pick a conversation mode, a difficulty (A2/B1/B2), and who should speak first — you or the app.
    This choice is remembered as your profile's default for next time.
-4. Tap the big 🎤 button to start listening — a red pulsing dot and a running timer show it's recording, with a
-   live preview of what it's picking up. Talk normally: pauses, multiple sentences, "umm"s are all fine, the app
-   keeps listening. **Tap the 🎤 button again when you're done** — only then is what you said sent to Claude and
-   answered; it never responds while the mic is still on.
+4. If you're about to speak Hungarian (e.g. to ask how to say something), tap **HU** next to the mic button
+   first (or press **Alt+L**) — it defaults to **EN** and switches back automatically after a Hungarian turn.
+   Then tap the big 🎤 button to start listening — a red pulsing dot and a running timer show it's recording,
+   with a live preview of what it's picking up. Talk normally: pauses, multiple sentences, "umm"s are all fine,
+   the app keeps listening. **Tap the 🎤 button again when you're done** — only then is what you said sent to
+   Claude and answered; it never responds while the mic is still on.
 
 > The Web Speech API requires a **secure context**; `http://localhost` counts as secure, so this works without HTTPS setup. The first time you use the mic, Chrome/Edge will ask for microphone permission — click **Allow**.
 
@@ -138,6 +140,13 @@ remembers them across reboots and app restarts.
   after a long pause, the app transparently restarts it behind the scenes and keeps appending to the same
   utterance, so you never notice a gap. A second tap stops listening — that's the only moment your message is
   sent to Claude and answered. Nothing is ever sent, and the app never replies, while the mic is on.
+- **An EN/HU switch next to the mic button picks the recognition language for that turn.** The Web Speech API
+  can only listen for one language at a time, so instead of guessing, you tell it: tap **EN** or **HU** (or
+  press **Alt+L** to toggle) before you start talking, and that's the language the mic listens for during that
+  turn. It defaults to **EN**, and automatically switches back to EN after a HU turn — so you only ever have to
+  remember to flip it on, not off. The switch (and the shortcut) are disabled while the mic is actively
+  listening, since changing it wouldn't affect a turn already in progress. Whichever language you spoke in, the
+  reply and everything the app says out loud is still always English — see below.
 - **The corrected sentence is spoken, never the Hungarian explanation.** When your turn had a mistake, before
   the conversational reply the app says the corrected English sentence slowly and clearly, then continues with
   the normal reply — both always in English. The Hungarian explanation is never spoken aloud; it only ever
@@ -148,8 +157,9 @@ remembers them across reboots and app restarts.
   session begins, out loud, then waits for you to turn the mic on. Your choice is saved as that profile's
   default for next time. In question-practice mode, the app always continues by asking the next question right
   after correcting your answer — you never have to prompt it.
-- **You can mix English and Hungarian in the same session — but the app only ever speaks English.** The mic
-  doesn't require you to pick a language upfront — Claude reads your turn and classifies it every time:
+- **You can mix English and Hungarian in the same session — but the app only ever speaks English.** Pick EN or
+  HU on the switch before each turn that needs it; either way, Claude reads the resulting text and classifies
+  what you actually said:
   - Spoke English? Handled exactly as above: a natural reply plus a correction if you made a mistake.
   - Asked in Hungarian how to say something in English (e.g. *"Angolul hogy kell mondani: sajnos nem tudok
     időben ott lenni?"*)? That's **not** graded as a mistake. Instead the app speaks the English sentence
@@ -160,18 +170,16 @@ remembers them across reboots and app restarts.
     lassabban"*)? The spoken reply is still entirely in English — the app answers or rephrases at your level in
     simple English and keeps the conversation going; any Hungarian help it adds is written-only, never spoken.
 
-  Speech recognition itself still only understands one language per browser recognizer session, so the app
-  hints the recognizer's language per (re)started segment from what it's heard so far (accented characters or
-  recognizable Hungarian words switch it to `hu-HU`); the real classification — which of the three cases above
-  applies — is always done by Claude on the finished transcript, not by that hint. Whatever language you speak
-  in, everything the app says out loud is English.
+  The EN/HU switch only controls *transcription accuracy* (which language the recognizer listens for); the
+  actual classification — which of the three cases above applies — is always done by Claude on the finished
+  transcript, regardless of which switch position you used to record it.
 
 ## Run the tests
 
 The correction-parsing logic (`backend/src/lib/correctionParser.ts`, including the bilingual turnType/translation/
 meta-question gating) has a full backend unit-test suite, and the pure frontend logic (transcript-segment merging
-for the continuous mic, the Hungarian-language heuristic, the turnType-aware spoken-sequence builder, the
-assistant-history composer, and elapsed-time formatting) has its own frontend suite:
+for the continuous mic, the turnType-aware spoken-sequence builder, the assistant-history composer, and
+elapsed-time formatting) has its own frontend suite:
 
 ```powershell
 cd backend

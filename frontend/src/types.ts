@@ -21,6 +21,11 @@ export interface Correction {
 
 export type InputLanguage = "en" | "hu";
 
+// The language explicitly chosen via the mic's EN/HU switch for one turn's
+// speech recognition (distinct from InputLanguage, which is Claude's
+// classification of the resulting text after the fact).
+export type MicLanguage = "en" | "hu";
+
 export type TurnType = "conversation" | "translation_request" | "meta_question";
 
 export interface TranslationAnswer {

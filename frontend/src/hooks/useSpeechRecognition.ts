@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { transcribeAudio } from "../api";
 import { appendTranscriptSegment } from "../lib/transcriptMerge";
-import { looksHungarian } from "../lib/languageHeuristic";
+import type { MicLanguage } from "../types";
 
 // Minimal typings for the (still non-standard) Web Speech API, which isn't
 // part of the default TS DOM lib.
@@ -47,6 +47,8 @@ declare global {
 
 export type SpeechInputMethod = "webspeech" | "mediarecorder" | "none";
 
+const LANG_TAG: Record<MicLanguage, string> = { en: "en-US", hu: "hu-HU" };
+
 interface UseSpeechRecognitionOptions {
   // Called exactly once, only after the mic is toggled off, with the full
   // accumulated utterance (possibly several sentences/pauses long).
@@ -81,9 +83,9 @@ export function useSpeechRecognition({ onResult, onError }: UseSpeechRecognition
   // transparently start a fresh recognizer session instead of stopping.
   const shouldListenRef = useRef(false);
   const finalTranscriptRef = useRef("");
-  // Last non-empty interim (not-yet-final) text seen, used only to pick a
-  // language hint for the next recognizer restart - see startWebSpeechSession.
-  const lastInterimRef = useRef("");
+  // The language explicitly chosen for the current turn (via the EN/HU
+  // switch) - fixed for the whole session, including transparent restarts.
+  const sessionLangRef = useRef<MicLanguage>("en");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -123,12 +125,10 @@ export function useSpeechRecognition({ onResult, onError }: UseSpeechRecognition
     if (!RecognitionCtor) return;
     const recognition = new RecognitionCtor();
     // The Web Speech API only takes one recognizer language per session, so
-    // true simultaneous bilingual recognition isn't possible - instead, hint
-    // the language for each (re)started segment from whatever's accumulated
-    // so far, so a mid-utterance switch to Hungarian is picked up on restart.
-    recognition.lang = looksHungarian(`${finalTranscriptRef.current} ${lastInterimRef.current}`)
-      ? "hu-HU"
-      : "en-US";
+    // true simultaneous bilingual recognition isn't possible - the language
+    // is whatever was explicitly chosen for this turn (via the EN/HU
+    // switch), fixed for every restart of this session.
+    recognition.lang = LANG_TAG[sessionLangRef.current];
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -144,7 +144,6 @@ export function useSpeechRecognition({ onResult, onError }: UseSpeechRecognition
           interim += transcript;
         }
       }
-      if (interim) lastInterimRef.current = interim;
       setPartialTranscript(interim);
     };
 
@@ -191,58 +190,67 @@ export function useSpeechRecognition({ onResult, onError }: UseSpeechRecognition
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [RecognitionCtor, onError, onResult, stopTimer]);
 
-  const startWebSpeech = useCallback(() => {
-    if (!RecognitionCtor) return;
-    shouldListenRef.current = true;
-    finalTranscriptRef.current = "";
-    lastInterimRef.current = "";
-    setPartialTranscript("");
-    setIsListening(true);
-    startTimer();
-    startWebSpeechSession();
-  }, [RecognitionCtor, startTimer, startWebSpeechSession]);
-
-  const startMediaRecorder = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setIsListening(false);
-        stopTimer();
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (blob.size === 0) return;
-        try {
-          const text = await transcribeAudio(blob);
-          if (text.trim()) onResult(text.trim());
-        } catch (err) {
-          onError(err instanceof Error ? err.message : "Nem sikerült felismerni a beszédet.");
-        }
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
+  const startWebSpeech = useCallback(
+    (lang: MicLanguage) => {
+      if (!RecognitionCtor) return;
+      shouldListenRef.current = true;
+      sessionLangRef.current = lang;
+      finalTranscriptRef.current = "";
+      setPartialTranscript("");
       setIsListening(true);
       startTimer();
-    } catch (err) {
-      const name = err instanceof DOMException ? err.name : "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        onError("A mikrofon használatához engedélyt kell adnod a böngészőben.");
-      } else {
-        onError("Nem sikerült elérni a mikrofont.");
-      }
-    }
-  }, [onResult, onError, startTimer, stopTimer]);
+      startWebSpeechSession();
+    },
+    [RecognitionCtor, startTimer, startWebSpeechSession]
+  );
 
-  const start = useCallback(() => {
-    if (method === "webspeech") startWebSpeech();
-    else if (method === "mediarecorder") void startMediaRecorder();
-    else onError("A böngésződ nem támogatja a hangfelismerést. Próbáld Chrome vagy Edge böngészővel.");
-  }, [method, startWebSpeech, startMediaRecorder, onError]);
+  const startMediaRecorder = useCallback(
+    async (lang: MicLanguage) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+        const recorder = new MediaRecorder(stream);
+        chunksRef.current = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+        recorder.onstop = async () => {
+          stream.getTracks().forEach((t) => t.stop());
+          setIsListening(false);
+          stopTimer();
+          const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+          if (blob.size === 0) return;
+          try {
+            const text = await transcribeAudio(blob, lang);
+            if (text.trim()) onResult(text.trim());
+          } catch (err) {
+            onError(err instanceof Error ? err.message : "Nem sikerült felismerni a beszédet.");
+          }
+        };
+        mediaRecorderRef.current = recorder;
+        recorder.start();
+        setIsListening(true);
+        startTimer();
+      } catch (err) {
+        const name = err instanceof DOMException ? err.name : "";
+        if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+          onError("A mikrofon használatához engedélyt kell adnod a böngészőben.");
+        } else {
+          onError("Nem sikerült elérni a mikrofont.");
+        }
+      }
+    },
+    [onResult, onError, startTimer, stopTimer]
+  );
+
+  const start = useCallback(
+    (lang: MicLanguage) => {
+      if (method === "webspeech") startWebSpeech(lang);
+      else if (method === "mediarecorder") void startMediaRecorder(lang);
+      else onError("A böngésződ nem támogatja a hangfelismerést. Próbáld Chrome vagy Edge böngészővel.");
+    },
+    [method, startWebSpeech, startMediaRecorder, onError]
+  );
 
   const stop = useCallback(() => {
     if (method === "webspeech") {

@@ -4,6 +4,7 @@ import type {
   ConversationMode,
   Difficulty,
   GlobalKeySettings,
+  MicLanguage,
   Profile,
   ProfileSettings,
   SessionListItem,
@@ -112,9 +113,10 @@ export async function fetchTtsAudio(
   return res.blob();
 }
 
-export async function transcribeAudio(blob: Blob): Promise<string> {
+export async function transcribeAudio(blob: Blob, language: MicLanguage): Promise<string> {
   const formData = new FormData();
   formData.append("audio", blob, "speech.webm");
+  formData.append("language", language);
   const res = await fetch("/api/stt", { method: "POST", body: formData });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

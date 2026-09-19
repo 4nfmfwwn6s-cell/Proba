@@ -17,10 +17,13 @@ sttRouter.post("/", upload.single("audio"), async (req, res) => {
     return res.status(400).json({ error: "MISSING_OPENAI_KEY" });
   }
 
+  const requestedLanguage = (req.body as { language?: string } | undefined)?.language;
+  const language = requestedLanguage === "hu" ? "hu" : "en";
+
   try {
     const formData = new FormData();
     formData.append("model", "whisper-1");
-    formData.append("language", "en");
+    formData.append("language", language);
     formData.append(
       "file",
       new Blob([new Uint8Array(file.buffer)], { type: file.mimetype || "audio/webm" }),

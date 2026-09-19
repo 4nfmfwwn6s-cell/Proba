@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ModeSelect } from "./components/ModeSelect";
 import { ChatBubble } from "./components/ChatBubble";
 import { MicButton } from "./components/MicButton";
+import { LanguageSwitch } from "./components/LanguageSwitch";
 import { SettingsPage } from "./components/SettingsPage";
 import { SessionSummary } from "./components/SessionSummary";
 import { ProfileSelect } from "./components/ProfileSelect";
@@ -25,6 +26,7 @@ import type {
   ChatMessage,
   ConversationMode,
   Difficulty,
+  MicLanguage,
   Profile,
   ProfileSettings,
   SessionListItem,
@@ -67,6 +69,11 @@ export default function App() {
   const [summary, setSummary] = useState<SessionSummaryType | null>(null);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
 
+  // Speech-recognition language for the next mic turn, chosen via the EN/HU
+  // switch next to the mic button (or Alt+L). Always defaults back to EN
+  // after a HU turn - see onResult below.
+  const [micLang, setMicLang] = useState<MicLanguage>("en");
+
   const historyRef = useRef<ChatMessage[]>([]);
   const logEndRef = useRef<HTMLDivElement | null>(null);
   const settingsRef = useRef<ProfileSettings | null>(null);
@@ -84,6 +91,9 @@ export default function App() {
   const onResult = useCallback(
     async (text: string) => {
       setError(null);
+      // Default is EN; a HU turn always reverts the switch back to EN for
+      // the next turn, so HU has to be chosen again each time it's needed.
+      setMicLang((prev) => (prev === "hu" ? "en" : prev));
       const userBubbleId = `u-${Date.now()}`;
       setBubbles((prev) => [...prev, { id: userBubbleId, role: "user", content: text }]);
 
@@ -168,9 +178,25 @@ export default function App() {
       stop();
     } else {
       stopSpeaking();
-      start();
+      start(micLang);
     }
   }
+
+  const micLangLocked = isSending || starting || isListening || method === "none";
+
+  // Alt+L toggles the EN/HU mic language switch, while on the chat screen
+  // and not mid-turn (mirrors the switch's own disabled state).
+  useEffect(() => {
+    if (screen !== "chat" || micLangLocked) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.altKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        setMicLang((prev) => (prev === "en" ? "hu" : "en"));
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [screen, micLangLocked]);
 
   async function handleStart(selectedMode: ConversationMode, selectedDifficulty: Difficulty, starter: Starter) {
     if (!profile) return;
@@ -183,6 +209,7 @@ export default function App() {
       setDifficulty(selectedDifficulty);
       setBubbles([]);
       historyRef.current = [];
+      setMicLang("en");
       setScreen("chat");
 
       if (starter === "app") {
@@ -346,11 +373,14 @@ export default function App() {
             </div>
 
             <div className="mic-area">
-              <MicButton
-                isListening={isListening}
-                disabled={isSending || starting || method === "none"}
-                onClick={handleMicToggle}
-              />
+              <div className="mic-controls-row">
+                <LanguageSwitch value={micLang} onChange={setMicLang} disabled={micLangLocked} />
+                <MicButton
+                  isListening={isListening}
+                  disabled={isSending || starting || method === "none"}
+                  onClick={handleMicToggle}
+                />
+              </div>
               {isListening && (
                 <div className="recording-indicator">
                   <span className="recording-dot" />
