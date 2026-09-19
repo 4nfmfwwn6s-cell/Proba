@@ -16,8 +16,11 @@ export function SettingsPage({ profileId, profileName, onClose, onSettingsChange
   const [openaiApiKey, setOpenaiApiKey] = useState("");
   const [ttsProvider, setTtsProvider] = useState<ProfileSettings["ttsProvider"]>("browser");
   const [ttsVoice, setTtsVoice] = useState("");
+  const [huTtsVoice, setHuTtsVoice] = useState("");
   const [speechSpeed, setSpeechSpeed] = useState(1.0);
   const [explanationLanguage, setExplanationLanguage] = useState<ProfileSettings["explanationLanguage"]>("hu");
+  const [correctionSpeechLevel, setCorrectionSpeechLevel] =
+    useState<ProfileSettings["correctionSpeechLevel"]>("corrected_and_explanation");
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
@@ -25,8 +28,10 @@ export function SettingsPage({ profileId, profileName, onClose, onSettingsChange
       setSettings(s);
       setTtsProvider(s.ttsProvider);
       setTtsVoice(s.ttsVoice);
+      setHuTtsVoice(s.huTtsVoice);
       setSpeechSpeed(s.speechSpeed);
       setExplanationLanguage(s.explanationLanguage);
+      setCorrectionSpeechLevel(s.correctionSpeechLevel);
     });
   }, [profileId]);
 
@@ -45,8 +50,10 @@ export function SettingsPage({ profileId, profileName, onClose, onSettingsChange
       const updated = await updateProfileSettings(profileId, {
         ttsProvider,
         ttsVoice,
+        huTtsVoice,
         speechSpeed,
         explanationLanguage,
+        correctionSpeechLevel,
       });
 
       setSettings(updated);
@@ -134,7 +141,7 @@ export function SettingsPage({ profileId, profileName, onClose, onSettingsChange
       </div>
 
       <div className="field">
-        <label htmlFor="tts-voice">Hang neve (opcionális)</label>
+        <label htmlFor="tts-voice">Angol hang neve (opcionális)</label>
         <input
           id="tts-voice"
           type="text"
@@ -142,6 +149,35 @@ export function SettingsPage({ profileId, profileName, onClose, onSettingsChange
           value={ttsVoice}
           onChange={(e) => setTtsVoice(e.target.value)}
         />
+      </div>
+
+      <div className="field">
+        <label htmlFor="hu-tts-voice">Magyar hang neve (opcionális)</label>
+        <input
+          id="hu-tts-voice"
+          type="text"
+          placeholder="pl. böngésző esetén a magyar hang neve, vagy ElevenLabs/OpenAI voice ID"
+          value={huTtsVoice}
+          onChange={(e) => setHuTtsVoice(e.target.value)}
+        />
+        <div className="hint">A javítások magyar magyarázatának felolvasásához használt hang.</div>
+      </div>
+
+      <div className="field">
+        <label htmlFor="correction-speech">Javítások felolvasása</label>
+        <select
+          id="correction-speech"
+          value={correctionSpeechLevel}
+          onChange={(e) => setCorrectionSpeechLevel(e.target.value as ProfileSettings["correctionSpeechLevel"])}
+        >
+          <option value="off">Kikapcsolva</option>
+          <option value="corrected_only">Csak a javított mondat</option>
+          <option value="corrected_and_explanation">Javított mondat + magyar magyarázat</option>
+        </select>
+        <div className="hint">
+          Hiba esetén az app a válasz előtt lassan felolvassa a javított angol mondatot
+          {correctionSpeechLevel === "corrected_and_explanation" ? ", majd a magyar magyarázatot" : ""}.
+        </div>
       </div>
 
       <div className="field">

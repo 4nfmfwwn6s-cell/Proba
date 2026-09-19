@@ -20,13 +20,14 @@ const MODE_GUIDANCE: Record<ConversationMode, string> = {
   roleplay_phone_call:
     "Role-play scenario: you are on a phone call with the learner (e.g. booking an appointment, calling customer service, or a casual call with a friend). Stay fully in character; do not reference that this is text, since it should feel like a real phone call.",
   question_practice:
-    "Question practice mode: ask the learner one clear question at a time about everyday topics (habits, opinions, experiences, hypotheticals). After they answer, ask a natural follow-up question. If the learner also asks YOU a question, answer briefly and then continue practicing by asking another question.",
+    "Question practice mode: ask the learner one clear question at a time about everyday topics (habits, opinions, experiences, hypotheticals). Every single reply you give must end by asking a new question - never end a reply without one, and never wait passively for the learner to prompt you for the next question. If the learner also asks YOU a question, answer briefly and then continue practicing by asking another question.",
 };
 
 export function buildSystemPrompt(
   mode: ConversationMode,
   difficulty: Difficulty,
-  explainOnRequest: boolean
+  explainOnRequest: boolean,
+  opening = false
 ): string {
   return `You are a friendly, patient English conversation partner and tutor for a Hungarian native speaker learning English at ${difficulty} level.
 
@@ -46,6 +47,10 @@ On every learner turn, in addition to the natural "reply", you must separately e
 - If the learner's message was correct and natural, set hasError=false.
 - Only flag real errors. Do not flag minor stylistic variation, filler words ("um", "well"), or perfectly acceptable native-like phrasing.
 - Classify errorType as one of: grammar, vocabulary, word_order, pronunciation_transcription, other.
-
+${
+  opening
+    ? "\nSTART OF CONVERSATION\nThis is the very beginning of the conversation - the learner has not said anything real yet (any message you see is just a system kickoff signal, not learner speech). Open the conversation yourself: greet the learner and/or ask an opening question that fits the scenario and level, in 1-2 sentences. Since there is no real learner message to evaluate, you must always set hasError=false and leave original/corrected/explanationHu empty.\n"
+    : ""
+}
 You must always respond by calling the "respond_with_correction" tool with both fields filled in. Never respond with plain text.`;
 }

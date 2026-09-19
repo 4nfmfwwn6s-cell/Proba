@@ -20,8 +20,11 @@ db.exec(`
     name TEXT NOT NULL COLLATE NOCASE UNIQUE,
     tts_provider TEXT NOT NULL DEFAULT 'browser',
     tts_voice TEXT NOT NULL DEFAULT '',
+    hu_tts_voice TEXT NOT NULL DEFAULT '',
     speech_speed REAL NOT NULL DEFAULT 1.0,
     explanation_language TEXT NOT NULL DEFAULT 'hu',
+    correction_speech_level TEXT NOT NULL DEFAULT 'corrected_and_explanation',
+    default_starter TEXT NOT NULL DEFAULT 'user',
     created_at TEXT NOT NULL
   );
 
@@ -44,9 +47,19 @@ db.exec(`
   );
 `);
 
-// Lightweight migration for databases created before user profiles existed:
-// add the profile_id column if an older `sessions` table is missing it.
-const sessionColumns = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
-if (!sessionColumns.some((c) => c.name === "profile_id")) {
-  db.exec("ALTER TABLE sessions ADD COLUMN profile_id INTEGER REFERENCES profiles(id)");
+// Lightweight migrations for databases created before a given column existed.
+function ensureColumn(table: string, column: string, ddl: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
 }
+
+ensureColumn("sessions", "profile_id", "profile_id INTEGER REFERENCES profiles(id)");
+ensureColumn("profiles", "hu_tts_voice", "hu_tts_voice TEXT NOT NULL DEFAULT ''");
+ensureColumn(
+  "profiles",
+  "correction_speech_level",
+  "correction_speech_level TEXT NOT NULL DEFAULT 'corrected_and_explanation'"
+);
+ensureColumn("profiles", "default_starter", "default_starter TEXT NOT NULL DEFAULT 'user'");

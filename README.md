@@ -1,8 +1,9 @@
 # English Coach — spoken English practice for Hungarian speakers
 
-A voice-based English conversation coach: you speak, it transcribes your speech,
-Claude replies naturally and (separately) corrects your grammar/vocabulary/word
-order with a one-sentence Hungarian explanation, and reads the reply back to you.
+A voice-based English conversation coach: press the mic once and just talk — through pauses, multiple
+sentences, hesitations — press it again when you're done, and the app transcribes your speech, Claude replies
+naturally and (separately) corrects your grammar/vocabulary/word order with a one-sentence Hungarian
+explanation, and reads both the correction and the reply back to you.
 
 ## Project structure
 
@@ -59,8 +60,12 @@ Then open **http://localhost:5173** in Chrome or Edge.
 2. Click the ⚙️ (settings) icon and paste your Anthropic API key, then **Mentés** (Save).
    The key is written to `backend/data/config.json` on your machine — it is never sent to the browser bundle.
    (API keys are shared across all profiles; each profile only keeps its own voice/speed/language preferences.)
-3. Go back, pick a conversation mode and a difficulty (A2/B1/B2), and press **Beszélgetés indítása**.
-4. Tap the big 🎤 button, speak in English, and tap it again (or wait) to send. The app replies out loud and shows the correction under your message.
+3. Go back, pick a conversation mode, a difficulty (A2/B1/B2), and who should speak first — you or the app.
+   This choice is remembered as your profile's default for next time.
+4. Tap the big 🎤 button to start listening — a red pulsing dot and a running timer show it's recording, with a
+   live preview of what it's picking up. Talk normally: pauses, multiple sentences, "umm"s are all fine, the app
+   keeps listening. **Tap the 🎤 button again when you're done** — only then is what you said sent to Claude and
+   answered; it never responds while the mic is still on.
 
 > The Web Speech API requires a **secure context**; `http://localhost` counts as secure, so this works without HTTPS setup. The first time you use the mic, Chrome/Edge will ask for microphone permission — click **Allow**.
 
@@ -123,12 +128,38 @@ remembers them across reboots and app restarts.
 > ElevenLabs API keys (and therefore the same billing). That's fine for a trusted home network; don't expose
 > this port beyond your LAN.
 
+## How the mic, corrections, and conversation start work
+
+- **Toggle mic, not push-to-talk.** One tap starts listening (continuous, with live interim transcription);
+  the mic stays on through pauses and multiple sentences. If the browser's own recognizer silently times out
+  after a long pause, the app transparently restarts it behind the scenes and keeps appending to the same
+  utterance, so you never notice a gap. A second tap stops listening — that's the only moment your message is
+  sent to Claude and answered. Nothing is ever sent, and the app never replies, while the mic is on.
+- **Corrections are spoken, not just written.** When your turn had a mistake, before the conversational reply
+  the app says the corrected English sentence slowly and clearly, then (if enabled) the short Hungarian
+  explanation in a Hungarian voice, then continues with the normal English reply in the English voice — always
+  in that order, never overlapping. Control this in Settings → **Javítások felolvasása**, with three levels:
+  off / corrected sentence only / corrected sentence + Hungarian explanation (the last one is the default). Set
+  separate English and Hungarian voices there too.
+- **Either side can start.** On the start screen, choose whether you or the app speaks first. If the app
+  starts, it greets you and/or asks an opening question that fits the chosen mode/scenario/level as soon as the
+  session begins, out loud, then waits for you to turn the mic on. Your choice is saved as that profile's
+  default for next time. In question-practice mode, the app always continues by asking the next question right
+  after correcting your answer — you never have to prompt it.
+
 ## Run the tests
 
-The correction-parsing logic (`backend/src/lib/correctionParser.ts`) has a full unit-test suite:
+The correction-parsing logic (`backend/src/lib/correctionParser.ts`) has a full backend unit-test suite, and the
+pure frontend logic (transcript-segment merging for the continuous mic, the spoken-correction sequencing, and
+elapsed-time formatting) has its own frontend suite:
 
 ```powershell
 cd backend
+npm test
+```
+
+```powershell
+cd frontend
 npm test
 ```
 
@@ -144,9 +175,12 @@ scopes:
 
 **Per-profile** (stored in SQLite, one row per profile — each person can set their own):
 - **TTS provider** — `browser` (free, built-in Chrome/Edge voices), `elevenlabs`, or `openai`.
-- **Voice name / ElevenLabs voice ID** — optional override.
-- **Speech speed** — 0.5x–1.5x, applied to whichever TTS engine is active.
+- **English voice name / ElevenLabs voice ID** — optional override, used for replies and corrected sentences.
+- **Hungarian voice name / voice ID** — optional override, used when speaking the Hungarian correction explanation.
+- **Correction speech level** — off / corrected sentence only / corrected sentence + Hungarian explanation (default: the last one). Controls what gets spoken aloud before the reply on a turn with a mistake.
+- **Speech speed** — 0.5x–1.5x, applied to whichever TTS engine is active (the corrected sentence is always read back a bit slower than this for emphasis).
 - **Explanation language** — Hungarian (default) or English, for the one-line correction explanations.
+- **Who starts** — you or the app; chosen on the start screen and remembered as the default for next time.
 
 ## Notes on how corrections work
 
@@ -162,6 +196,8 @@ inline as part of that turn's reply.
 - **Mic button says "A böngésződ nem támogatja a hangfelismerést"** — your browser doesn't support the Web Speech API. Use Chrome or Edge. If an OpenAI key is set in Settings, the app automatically falls back to recording audio and transcribing it via Whisper instead.
 - **"A mikrofon használatához engedélyt kell adnod"** — microphone permission was denied. Click the padlock/site-info icon in the address bar and allow microphone access for `localhost`, then reload.
 - **Corrections never show up / chat errors out** — check that an Anthropic API key is saved in Settings; the app will show a banner if it's missing.
+- **No Hungarian voice / the Hungarian explanation sounds wrong** — this depends on voices installed in your OS/browser. Windows usually ships at least one `hu-HU` voice (check *Settings → Time & Language → Speech* on Windows, or your browser's voice list); if none is found, the browser falls back to its default voice for that text. Using ElevenLabs or OpenAI TTS instead avoids this, since those support Hungarian regardless of installed system voices.
+- **The app never answers, even though I stopped talking** — remember the mic is a toggle now: tap it again to stop listening and send. It intentionally never replies while the mic is still on.
 
 ## Data storage
 

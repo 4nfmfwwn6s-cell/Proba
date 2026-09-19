@@ -345,6 +345,46 @@ body {
   text-align: center;
 }
 
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: pulse-dot 1.2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.partial-transcript {
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.95rem;
+  text-align: center;
+  min-height: 1.3em;
+}
+
 .banner {
   padding: 10px 14px;
   border-radius: 12px;

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db.js";
 import { loadConfig, publicConfig } from "../config.js";
-import type { TtsProvider } from "../types.js";
+import type { CorrectionSpeechLevel, Starter, TtsProvider } from "../types.js";
 
 export const profilesRouter = Router();
 
@@ -10,8 +10,11 @@ interface ProfileRow {
   name: string;
   tts_provider: TtsProvider;
   tts_voice: string;
+  hu_tts_voice: string;
   speech_speed: number;
   explanation_language: "hu" | "en";
+  correction_speech_level: CorrectionSpeechLevel;
+  default_starter: Starter;
   created_at: string;
 }
 
@@ -42,7 +45,9 @@ profilesRouter.post("/", (req, res) => {
   const now = new Date().toISOString();
   const info = db
     .prepare(
-      "INSERT INTO profiles (name, tts_provider, tts_voice, speech_speed, explanation_language, created_at) VALUES (?, 'browser', '', 1.0, 'hu', ?)"
+      `INSERT INTO profiles
+        (name, tts_provider, tts_voice, hu_tts_voice, speech_speed, explanation_language, correction_speech_level, default_starter, created_at)
+       VALUES (?, 'browser', '', '', 1.0, 'hu', 'corrected_and_explanation', 'user', ?)`
     )
     .run(name, now);
 
@@ -53,25 +58,42 @@ function getProfileRow(id: number): ProfileRow | undefined {
   return db.prepare("SELECT * FROM profiles WHERE id = ?").get(id) as ProfileRow | undefined;
 }
 
-profilesRouter.get("/:id/settings", (req, res) => {
-  const profile = getProfileRow(Number(req.params.id));
-  if (!profile) return res.status(404).json({ error: "Profile not found" });
-
-  res.json({
+function profileSettingsPayload(profile: ProfileRow) {
+  return {
     ...publicConfig(loadConfig()),
     ttsProvider: profile.tts_provider,
     ttsVoice: profile.tts_voice,
+    huTtsVoice: profile.hu_tts_voice,
     speechSpeed: profile.speech_speed,
     explanationLanguage: profile.explanation_language,
-  });
+    correctionSpeechLevel: profile.correction_speech_level,
+    defaultStarter: profile.default_starter,
+  };
+}
+
+profilesRouter.get("/:id/settings", (req, res) => {
+  const profile = getProfileRow(Number(req.params.id));
+  if (!profile) return res.status(404).json({ error: "Profile not found" });
+  res.json(profileSettingsPayload(profile));
 });
 
-const ALLOWED_PREFS = ["ttsProvider", "ttsVoice", "speechSpeed", "explanationLanguage"] as const;
+const ALLOWED_PREFS = [
+  "ttsProvider",
+  "ttsVoice",
+  "huTtsVoice",
+  "speechSpeed",
+  "explanationLanguage",
+  "correctionSpeechLevel",
+  "defaultStarter",
+] as const;
 const COLUMN_BY_PREF: Record<(typeof ALLOWED_PREFS)[number], string> = {
   ttsProvider: "tts_provider",
   ttsVoice: "tts_voice",
+  huTtsVoice: "hu_tts_voice",
   speechSpeed: "speech_speed",
   explanationLanguage: "explanation_language",
+  correctionSpeechLevel: "correction_speech_level",
+  defaultStarter: "default_starter",
 };
 
 profilesRouter.post("/:id/settings", (req, res) => {
@@ -96,11 +118,5 @@ profilesRouter.post("/:id/settings", (req, res) => {
   }
 
   const updated = getProfileRow(profileId)!;
-  res.json({
-    ...publicConfig(loadConfig()),
-    ttsProvider: updated.tts_provider,
-    ttsVoice: updated.tts_voice,
-    speechSpeed: updated.speech_speed,
-    explanationLanguage: updated.explanation_language,
-  });
+  res.json(profileSettingsPayload(updated));
 });

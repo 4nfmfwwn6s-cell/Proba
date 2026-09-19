@@ -49,6 +49,30 @@ const CORRECTION_TOOL = {
   },
 };
 
+async function callWithCorrectionTool(
+  apiKey: string,
+  system: string,
+  messages: ChatMessage[]
+): Promise<ChatTurnResult> {
+  const client = new Anthropic({ apiKey });
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    system,
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    tools: [CORRECTION_TOOL],
+    tool_choice: { type: "tool", name: "respond_with_correction" },
+  });
+
+  const toolUse = response.content.find((block) => block.type === "tool_use");
+  if (!toolUse || toolUse.type !== "tool_use") {
+    return { reply: "Sorry, I had trouble responding. Could you try again?", correction: null };
+  }
+
+  return parseChatResult(toolUse.input);
+}
+
 export async function getChatCompletion(
   apiKey: string,
   history: ChatMessage[],
@@ -62,21 +86,23 @@ export async function getChatCompletion(
   const lastUserMessage = [...history].reverse().find((m) => m.role === "user")?.content ?? "";
   const explainOnRequest = /\bexplain\b/i.test(lastUserMessage) || /magyar[aá]zd/i.test(lastUserMessage);
 
-  const client = new Anthropic({ apiKey });
+  return callWithCorrectionTool(apiKey, buildSystemPrompt(mode, difficulty, explainOnRequest), history);
+}
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system: buildSystemPrompt(mode, difficulty, explainOnRequest),
-    messages: history.map((m) => ({ role: m.role, content: m.content })),
-    tools: [CORRECTION_TOOL],
-    tool_choice: { type: "tool", name: "respond_with_correction" },
-  });
-
-  const toolUse = response.content.find((block) => block.type === "tool_use");
-  if (!toolUse || toolUse.type !== "tool_use") {
-    return { reply: "Sorry, I had trouble responding. Could you try again?", correction: null };
+// Generates the AI's opening line for sessions where the app speaks first -
+// there is no real learner message yet, so the correction is always null.
+export async function getOpeningReply(
+  apiKey: string,
+  mode: ConversationMode,
+  difficulty: Difficulty
+): Promise<ChatTurnResult> {
+  if (!apiKey) {
+    throw new Error("MISSING_API_KEY");
   }
 
-  return parseChatResult(toolUse.input);
+  const system = buildSystemPrompt(mode, difficulty, false, true);
+  const kickoff: ChatMessage[] = [{ role: "user", content: "[SYSTEM: Start the conversation now.]" }];
+
+  const result = await callWithCorrectionTool(apiKey, system, kickoff);
+  return { reply: result.reply, correction: null };
 }

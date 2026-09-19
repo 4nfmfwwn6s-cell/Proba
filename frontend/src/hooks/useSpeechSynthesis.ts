@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchTtsAudio } from "../api";
 import type { ProfileSettings } from "../types";
+import type { SpeechPart } from "../lib/correctionSpeech";
+
+const LANG_TAG: Record<SpeechPart["lang"], string> = { en: "en-US", hu: "hu-HU" };
 
 export function useSpeechSynthesis(settings: ProfileSettings | null) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const cancelledRef = useRef(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   const browserSupported = typeof window !== "undefined" && "speechSynthesis" in window;
@@ -19,75 +23,108 @@ export function useSpeechSynthesis(settings: ProfileSettings | null) {
     };
   }, [browserSupported]);
 
-  const speakWithBrowser = useCallback(
-    (text: string) => {
-      if (!browserSupported) return;
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-      utterance.rate = settings?.speechSpeed ?? 1.0;
-
-      const preferredVoice =
-        voices.find((v) => v.name === settings?.ttsVoice) ??
-        voices.find((v) => v.lang.startsWith("en") && v.localService) ??
-        voices.find((v) => v.lang.startsWith("en"));
-      if (preferredVoice) utterance.voice = preferredVoice;
-
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
+  const pickBrowserVoice = useCallback(
+    (lang: SpeechPart["lang"]): SpeechSynthesisVoice | undefined => {
+      const preferredName = lang === "hu" ? settings?.huTtsVoice : settings?.ttsVoice;
+      return (
+        voices.find((v) => v.name === preferredName) ??
+        voices.find((v) => v.lang.startsWith(lang) && v.localService) ??
+        voices.find((v) => v.lang.startsWith(lang))
+      );
     },
-    [browserSupported, settings?.speechSpeed, settings?.ttsVoice, voices]
+    [voices, settings?.huTtsVoice, settings?.ttsVoice]
   );
 
-  const speakWithServer = useCallback(
-    async (text: string) => {
+  // Speaks a single part with the browser voice, resolving once it's done
+  // (never rejects, so a sequence keeps going even if one part fails).
+  const speakPartWithBrowser = useCallback(
+    (part: SpeechPart): Promise<void> => {
+      return new Promise((resolve) => {
+        if (!browserSupported || cancelledRef.current) {
+          resolve();
+          return;
+        }
+        const utterance = new SpeechSynthesisUtterance(part.text);
+        utterance.lang = LANG_TAG[part.lang];
+        utterance.rate = part.rate;
+        const voice = pickBrowserVoice(part.lang);
+        if (voice) utterance.voice = voice;
+
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+        window.speechSynthesis.speak(utterance);
+      });
+    },
+    [browserSupported, pickBrowserVoice]
+  );
+
+  const speakPartWithServer = useCallback(
+    async (part: SpeechPart): Promise<void> => {
+      if (cancelledRef.current) return;
       try {
-        setIsSpeaking(true);
-        const blob = await fetchTtsAudio(
-          text,
-          settings?.speechSpeed ?? 1.0,
-          settings?.ttsProvider ?? "browser",
-          settings?.ttsVoice ?? ""
-        );
+        const voice =
+          part.lang === "hu" ? settings?.huTtsVoice || settings?.ttsVoice || "" : (settings?.ttsVoice ?? "");
+        const blob = await fetchTtsAudio(part.text, part.rate, settings?.ttsProvider ?? "browser", voice);
+        if (cancelledRef.current) return;
+
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audioRef.current = audio;
-        audio.onended = () => {
-          setIsSpeaking(false);
-          URL.revokeObjectURL(url);
-        };
-        audio.onerror = () => {
-          setIsSpeaking(false);
-          URL.revokeObjectURL(url);
-        };
-        await audio.play();
+        setIsSpeaking(true);
+        await new Promise<void>((resolve) => {
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            resolve();
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve();
+          };
+          audio.play().catch(() => resolve());
+        });
       } catch {
-        setIsSpeaking(false);
         // Fall back to the browser voice if the server TTS provider fails.
-        speakWithBrowser(text);
+        if (!cancelledRef.current) await speakPartWithBrowser(part);
       }
     },
-    [settings?.speechSpeed, settings?.ttsProvider, settings?.ttsVoice, speakWithBrowser]
+    [settings?.ttsProvider, settings?.ttsVoice, settings?.huTtsVoice, speakPartWithBrowser]
+  );
+
+  // Speaks each part in order, waiting for one to finish before starting the
+  // next - so e.g. the corrected sentence, the Hungarian explanation, and the
+  // reply never overlap. stop() aborts the remaining parts of the sequence.
+  const speakSequence = useCallback(
+    async (parts: SpeechPart[]) => {
+      cancelledRef.current = false;
+      const useServer = Boolean(settings && settings.ttsProvider !== "browser");
+      for (const part of parts) {
+        if (cancelledRef.current) break;
+        if (!part.text.trim()) continue;
+        if (useServer) {
+          await speakPartWithServer(part);
+        } else {
+          await speakPartWithBrowser(part);
+        }
+      }
+      setIsSpeaking(false);
+    },
+    [settings, speakPartWithServer, speakPartWithBrowser]
   );
 
   const speak = useCallback(
     (text: string) => {
-      if (settings && settings.ttsProvider !== "browser") {
-        void speakWithServer(text);
-      } else {
-        speakWithBrowser(text);
-      }
+      void speakSequence([{ text, lang: "en", rate: settings?.speechSpeed ?? 1.0 }]);
     },
-    [settings, speakWithServer, speakWithBrowser]
+    [speakSequence, settings?.speechSpeed]
   );
 
   const stop = useCallback(() => {
+    cancelledRef.current = true;
     if (browserSupported) window.speechSynthesis.cancel();
     audioRef.current?.pause();
     setIsSpeaking(false);
   }, [browserSupported]);
 
-  return { speak, stop, isSpeaking, browserSupported, voices };
+  return { speak, speakSequence, stop, isSpeaking, browserSupported, voices };
 }

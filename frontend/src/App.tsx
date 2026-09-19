@@ -7,7 +7,18 @@ import { SessionSummary } from "./components/SessionSummary";
 import { ProfileSelect } from "./components/ProfileSelect";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "./hooks/useSpeechSynthesis";
-import { createSession, endSession, getProfileSettings, getSession, listSessions, sendChatTurn } from "./api";
+import { buildSpokenSequence } from "./lib/correctionSpeech";
+import { formatElapsed } from "./lib/format";
+import {
+  createSession,
+  endSession,
+  getOpeningReply,
+  getProfileSettings,
+  getSession,
+  listSessions,
+  sendChatTurn,
+  updateProfileSettings,
+} from "./api";
 import type {
   ChatBubbleData,
   ChatMessage,
@@ -17,6 +28,7 @@ import type {
   ProfileSettings,
   SessionListItem,
   SessionSummary as SessionSummaryType,
+  Starter,
 } from "./types";
 import { MODE_LABELS } from "./types";
 
@@ -56,6 +68,8 @@ export default function App() {
 
   const historyRef = useRef<ChatMessage[]>([]);
   const logEndRef = useRef<HTMLDivElement | null>(null);
+  const settingsRef = useRef<ProfileSettings | null>(null);
+  settingsRef.current = settings;
 
   useEffect(() => {
     if (!profile) return;
@@ -64,7 +78,7 @@ export default function App() {
       .catch(() => {});
   }, [profile]);
 
-  const { speak } = useSpeechSynthesis(settings);
+  const { speak, speakSequence, stop: stopSpeaking } = useSpeechSynthesis(settings);
 
   const onResult = useCallback(
     async (text: string) => {
@@ -86,19 +100,26 @@ export default function App() {
         const assistantBubbleId = `a-${Date.now()}`;
         setBubbles((prev) => [...prev, { id: assistantBubbleId, role: "assistant", content: result.reply }]);
         historyRef.current = [...historyRef.current, { role: "assistant", content: result.reply }];
-        speak(result.reply);
+
+        const level = settingsRef.current?.correctionSpeechLevel ?? "corrected_and_explanation";
+        const baseSpeed = settingsRef.current?.speechSpeed ?? 1.0;
+        const parts = buildSpokenSequence(result.reply, result.correction, level, baseSpeed);
+        void speakSequence(parts);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Hiba történt a válasz lekérésekor.");
       } finally {
         setIsSending(false);
       }
     },
-    [sessionId, speak]
+    [sessionId, speakSequence]
   );
 
   const onSpeechError = useCallback((message: string) => setError(message), []);
 
-  const { method, isListening, start, stop } = useSpeechRecognition({ onResult, onError: onSpeechError });
+  const { method, isListening, partialTranscript, elapsedSeconds, start, stop } = useSpeechRecognition({
+    onResult,
+    onError: onSpeechError,
+  });
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -120,7 +141,22 @@ export default function App() {
     setScreen("profile");
   }
 
-  async function handleStart(selectedMode: ConversationMode, selectedDifficulty: Difficulty) {
+  function handleStarterChange(starter: Starter) {
+    if (!profile) return;
+    setSettings((prev) => (prev ? { ...prev, defaultStarter: starter } : prev));
+    updateProfileSettings(profile.id, { defaultStarter: starter }).catch(() => {});
+  }
+
+  function handleMicToggle() {
+    if (isListening) {
+      stop();
+    } else {
+      stopSpeaking();
+      start();
+    }
+  }
+
+  async function handleStart(selectedMode: ConversationMode, selectedDifficulty: Difficulty, starter: Starter) {
     if (!profile) return;
     setStarting(true);
     setError(null);
@@ -132,6 +168,14 @@ export default function App() {
       setBubbles([]);
       historyRef.current = [];
       setScreen("chat");
+
+      if (starter === "app") {
+        const opening = await getOpeningReply(session.sessionId);
+        const assistantBubbleId = `a-${Date.now()}`;
+        setBubbles([{ id: assistantBubbleId, role: "assistant", content: opening.reply }]);
+        historyRef.current = [{ role: "assistant", content: opening.reply }];
+        speak(opening.reply);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nem sikerült elindítani a beszélgetést.");
     } finally {
@@ -213,7 +257,14 @@ export default function App() {
           </div>
         )}
 
-        {screen === "setup" && <ModeSelect onStart={handleStart} starting={starting} />}
+        {screen === "setup" && (
+          <ModeSelect
+            onStart={handleStart}
+            starting={starting}
+            defaultStarter={settings?.defaultStarter ?? "user"}
+            onStarterChange={handleStarterChange}
+          />
+        )}
 
         {screen === "settings" && (
           <SettingsPage
@@ -281,16 +332,23 @@ export default function App() {
             <div className="mic-area">
               <MicButton
                 isListening={isListening}
-                disabled={isSending || method === "none"}
-                onClick={() => (isListening ? stop() : start())}
+                disabled={isSending || starting || method === "none"}
+                onClick={handleMicToggle}
               />
+              {isListening && (
+                <div className="recording-indicator">
+                  <span className="recording-dot" />
+                  Felvétel... {formatElapsed(elapsedSeconds)}
+                </div>
+              )}
+              {isListening && partialTranscript && <div className="partial-transcript">{partialTranscript}</div>}
               <div className="mic-status">
                 {method === "none"
                   ? "A böngésződ nem támogatja a hangfelismerést."
                   : isSending
                     ? "Gondolkodom..."
                     : isListening
-                      ? "Hallgatlak..."
+                      ? "Hallgatlak, koppints ismét a leállításhoz..."
                       : "Koppints és beszélj"}
               </div>
             </div>

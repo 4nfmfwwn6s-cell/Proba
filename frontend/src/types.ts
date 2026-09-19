@@ -43,12 +43,19 @@ export interface GlobalKeySettings {
   hasOpenaiKey: boolean;
 }
 
+export type CorrectionSpeechLevel = "off" | "corrected_only" | "corrected_and_explanation";
+
+export type Starter = "user" | "app";
+
 // Global key-presence flags plus the active profile's own preferences.
 export interface ProfileSettings extends GlobalKeySettings {
   ttsProvider: "browser" | "elevenlabs" | "openai";
   ttsVoice: string;
+  huTtsVoice: string;
   speechSpeed: number;
   explanationLanguage: "hu" | "en";
+  correctionSpeechLevel: CorrectionSpeechLevel;
+  defaultStarter: Starter;
 }
 
 export interface Profile {
@@ -86,4 +93,10 @@ export const ERROR_TYPE_LABELS: Record<ErrorType, string> = {
   word_order: "Szórend",
   pronunciation_transcription: "Kiejtés / leírás",
   other: "Egyéb",
+};
+
+export const CORRECTION_SPEECH_LABELS: Record<CorrectionSpeechLevel, string> = {
+  off: "Kikapcsolva",
+  corrected_only: "Csak a javított mondat felolvasása",
+  corrected_and_explanation: "Javított mondat + magyar magyarázat felolvasása",
 };

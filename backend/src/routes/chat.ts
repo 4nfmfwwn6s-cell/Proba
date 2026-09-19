@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db.js";
 import { loadConfig } from "../config.js";
-import { getChatCompletion } from "../lib/anthropic.js";
+import { getChatCompletion, getOpeningReply } from "../lib/anthropic.js";
 import type { ChatMessage, ConversationMode, Difficulty } from "../types.js";
 
 export const chatRouter = Router();
@@ -55,6 +55,46 @@ chatRouter.post("/", async (req, res) => {
       return res.status(400).json({ error: "MISSING_API_KEY" });
     }
     console.error("Chat error:", err);
+    res.status(502).json({ error: "Failed to reach the language model. Please try again." });
+  }
+});
+
+// Used when the app is set to speak first: generates an opening line with no
+// preceding learner message, and stores only the resulting assistant turn.
+chatRouter.post("/opening", async (req, res) => {
+  const { sessionId } = req.body as { sessionId?: number };
+
+  if (!sessionId) {
+    return res.status(400).json({ error: "sessionId is required" });
+  }
+
+  const session = db
+    .prepare("SELECT id, mode, difficulty FROM sessions WHERE id = ?")
+    .get(sessionId) as SessionRow | undefined;
+
+  if (!session) {
+    return res.status(404).json({ error: "Session not found" });
+  }
+
+  const config = loadConfig();
+  if (!config.anthropicApiKey) {
+    return res.status(400).json({ error: "MISSING_API_KEY" });
+  }
+
+  try {
+    const result = await getOpeningReply(config.anthropicApiKey, session.mode, session.difficulty);
+    const now = new Date().toISOString();
+
+    db.prepare(
+      "INSERT INTO turns (session_id, role, content, correction_json, created_at) VALUES (?, 'assistant', ?, NULL, ?)"
+    ).run(sessionId, result.reply, now);
+
+    res.json(result);
+  } catch (err) {
+    if (err instanceof Error && err.message === "MISSING_API_KEY") {
+      return res.status(400).json({ error: "MISSING_API_KEY" });
+    }
+    console.error("Opening reply error:", err);
     res.status(502).json({ error: "Failed to reach the language model. Please try again." });
   }
 });

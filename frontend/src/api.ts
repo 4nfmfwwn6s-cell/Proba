@@ -55,6 +55,13 @@ export function sendChatTurn(sessionId: number, history: ChatMessage[]) {
   });
 }
 
+export function getOpeningReply(sessionId: number) {
+  return jsonFetch<ChatTurnResult>("/api/chat/opening", {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
 export function endSession(sessionId: number) {
   return jsonFetch<{ endedAt: string; summary: SessionSummary }>(`/api/sessions/${sessionId}/end`, {
     method: "POST",

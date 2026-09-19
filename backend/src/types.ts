@@ -38,12 +38,19 @@ export interface AppConfig {
 
 export type TtsProvider = "browser" | "elevenlabs" | "openai";
 
+export type CorrectionSpeechLevel = "off" | "corrected_only" | "corrected_and_explanation";
+
+export type Starter = "user" | "app";
+
 // Per-user preferences, stored per profile in SQLite.
 export interface ProfilePrefs {
   ttsProvider: TtsProvider;
   ttsVoice: string;
+  huTtsVoice: string;
   speechSpeed: number;
   explanationLanguage: "hu" | "en";
+  correctionSpeechLevel: CorrectionSpeechLevel;
+  defaultStarter: Starter;
 }
 
 export interface Profile {
