@@ -29,14 +29,26 @@ export interface ChatTurnResult {
   correction: Correction | null;
 }
 
+// Shared secrets/config, global across all profiles (never sent to the browser).
 export interface AppConfig {
   anthropicApiKey: string;
   elevenLabsApiKey: string;
   openaiApiKey: string;
-  ttsProvider: "browser" | "elevenlabs" | "openai";
+}
+
+export type TtsProvider = "browser" | "elevenlabs" | "openai";
+
+// Per-user preferences, stored per profile in SQLite.
+export interface ProfilePrefs {
+  ttsProvider: TtsProvider;
   ttsVoice: string;
   speechSpeed: number;
   explanationLanguage: "hu" | "en";
+}
+
+export interface Profile {
+  id: number;
+  name: string;
 }
 
 export interface ChatMessage {
@@ -46,6 +58,7 @@ export interface ChatMessage {
 
 export interface SessionRecord {
   id: number;
+  profileId: number;
   mode: ConversationMode;
   difficulty: Difficulty;
   startedAt: string;

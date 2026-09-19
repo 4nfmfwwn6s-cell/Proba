@@ -8,15 +8,7 @@ settingsRouter.get("/", (_req, res) => {
   res.json(publicConfig(loadConfig()));
 });
 
-const ALLOWED_KEYS: (keyof AppConfig)[] = [
-  "anthropicApiKey",
-  "elevenLabsApiKey",
-  "openaiApiKey",
-  "ttsProvider",
-  "ttsVoice",
-  "speechSpeed",
-  "explanationLanguage",
-];
+const ALLOWED_KEYS: (keyof AppConfig)[] = ["anthropicApiKey", "elevenLabsApiKey", "openaiApiKey"];
 
 settingsRouter.post("/", (req, res) => {
   const body = req.body as Partial<AppConfig>;

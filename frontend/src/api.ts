@@ -3,7 +3,9 @@ import type {
   ChatTurnResult,
   ConversationMode,
   Difficulty,
-  PublicSettings,
+  GlobalKeySettings,
+  Profile,
+  ProfileSettings,
   SessionListItem,
   SessionSummary,
 } from "./types";
@@ -20,10 +22,29 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function createSession(mode: ConversationMode, difficulty: Difficulty) {
+export function listProfiles() {
+  return jsonFetch<Profile[]>("/api/profiles");
+}
+
+export function createProfile(name: string) {
+  return jsonFetch<Profile>("/api/profiles", { method: "POST", body: JSON.stringify({ name }) });
+}
+
+export function getProfileSettings(profileId: number) {
+  return jsonFetch<ProfileSettings>(`/api/profiles/${profileId}/settings`);
+}
+
+export function updateProfileSettings(profileId: number, partial: Record<string, unknown>) {
+  return jsonFetch<ProfileSettings>(`/api/profiles/${profileId}/settings`, {
+    method: "POST",
+    body: JSON.stringify(partial),
+  });
+}
+
+export function createSession(profileId: number, mode: ConversationMode, difficulty: Difficulty) {
   return jsonFetch<{ sessionId: number; mode: ConversationMode; difficulty: Difficulty; startedAt: string }>(
     "/api/sessions",
-    { method: "POST", body: JSON.stringify({ mode, difficulty }) }
+    { method: "POST", body: JSON.stringify({ profileId, mode, difficulty }) }
   );
 }
 
@@ -40,8 +61,8 @@ export function endSession(sessionId: number) {
   });
 }
 
-export function listSessions() {
-  return jsonFetch<SessionListItem[]>("/api/sessions");
+export function listSessions(profileId: number) {
+  return jsonFetch<SessionListItem[]>(`/api/sessions?profileId=${profileId}`);
 }
 
 export interface SessionDetail {
@@ -54,23 +75,28 @@ export interface SessionDetail {
   summary: SessionSummary;
 }
 
-export function getSession(sessionId: number) {
-  return jsonFetch<SessionDetail>(`/api/sessions/${sessionId}`);
+export function getSession(sessionId: number, profileId: number) {
+  return jsonFetch<SessionDetail>(`/api/sessions/${sessionId}?profileId=${profileId}`);
 }
 
-export function getSettings() {
-  return jsonFetch<PublicSettings>("/api/settings");
+export function getGlobalKeySettings() {
+  return jsonFetch<GlobalKeySettings>("/api/settings");
 }
 
-export function updateSettings(partial: Record<string, unknown>) {
-  return jsonFetch<PublicSettings>("/api/settings", { method: "POST", body: JSON.stringify(partial) });
+export function updateGlobalKeySettings(partial: Record<string, unknown>) {
+  return jsonFetch<GlobalKeySettings>("/api/settings", { method: "POST", body: JSON.stringify(partial) });
 }
 
-export async function fetchTtsAudio(text: string, speed: number): Promise<Blob> {
+export async function fetchTtsAudio(
+  text: string,
+  speed: number,
+  ttsProvider: string,
+  ttsVoice: string
+): Promise<Blob> {
   const res = await fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, speed }),
+    body: JSON.stringify({ text, speed, ttsProvider, ttsVoice }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

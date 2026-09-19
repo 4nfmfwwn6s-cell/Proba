@@ -52,10 +52,15 @@ npm run dev
 
 Then open **http://localhost:5173** in Chrome or Edge.
 
-1. Click the ⚙️ (settings) icon and paste your Anthropic API key, then **Mentés** (Save).
+1. On the first screen, type your name and press **Profil létrehozása és folytatás** to create your profile
+   (e.g. "Efraim"). Anyone else using the app on the same machine or network does the same with their own name —
+   each profile gets its own session history, mistakes, and voice/speed preferences. You can switch profiles
+   anytime by tapping your name in the top bar.
+2. Click the ⚙️ (settings) icon and paste your Anthropic API key, then **Mentés** (Save).
    The key is written to `backend/data/config.json` on your machine — it is never sent to the browser bundle.
-2. Go back, pick a conversation mode and a difficulty (A2/B1/B2), and press **Beszélgetés indítása**.
-3. Tap the big 🎤 button, speak in English, and tap it again (or wait) to send. The app replies out loud and shows the correction under your message.
+   (API keys are shared across all profiles; each profile only keeps its own voice/speed/language preferences.)
+3. Go back, pick a conversation mode and a difficulty (A2/B1/B2), and press **Beszélgetés indítása**.
+4. Tap the big 🎤 button, speak in English, and tap it again (or wait) to send. The app replies out loud and shows the correction under your message.
 
 > The Web Speech API requires a **secure context**; `http://localhost` counts as secure, so this works without HTTPS setup. The first time you use the mic, Chrome/Edge will ask for microphone permission — click **Allow**.
 
@@ -74,6 +79,50 @@ npm start
 
 Then open **http://localhost:3001** — the backend serves both the API and the built UI.
 
+## Using it from other devices on your Wi-Fi
+
+The backend listens on all network interfaces (`0.0.0.0`), not just `localhost`. When you start it
+(`npm run dev` in `backend/`, or `npm start` after a production build), the console prints the exact URL to use
+from your phone, tablet, or another PC on the same Wi-Fi network, for example:
+
+```
+English coach backend listening on:
+  Local:   http://localhost:3001
+  Network: http://192.168.1.23:3001  <- open this on other devices on your Wi-Fi
+```
+
+Open that `Network:` address in a browser on the other device. (In dev mode, the Vite frontend at port 5173 is
+also reachable on your LAN — Vite prints its own `Network:` URL when you run `npm run dev` in `frontend/`.)
+
+### Windows Firewall
+
+The first time the server binds to `0.0.0.0`, Windows Defender Firewall may show an **"Windows Defender Firewall
+has blocked some features of this app"** popup for Node.js — click **Allow access** (at least for **Private**
+networks) so other devices can reach it.
+
+If you don't see that prompt, or you accidentally clicked "Cancel"/"Block", add a firewall rule manually. Open
+**PowerShell as Administrator** and run (adjust `-LocalPort` if you changed `PORT`):
+
+```powershell
+New-NetFirewallRule -DisplayName "English Coach Backend" -Direction Inbound -Protocol TCP -LocalPort 3001 -Action Allow -Profile Private
+```
+
+If you're also using the two-terminal dev setup (not the single production build), add a second rule for the
+Vite dev server:
+
+```powershell
+New-NetFirewallRule -DisplayName "English Coach Frontend (dev)" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private
+```
+
+Use `-Profile Private` (not `Public`) since a home Wi-Fi network is normally classified as Private in Windows —
+this keeps the port closed to untrusted networks like coffee-shop Wi-Fi. You only need these rules once; Windows
+remembers them across reboots and app restarts.
+
+> Profiles have no passwords (by design, per the settings above), so anyone who can reach the app on your Wi-Fi
+> can open any existing profile or create a new one, and every profile uses the same shared Anthropic/OpenAI/
+> ElevenLabs API keys (and therefore the same billing). That's fine for a trusted home network; don't expose
+> this port beyond your LAN.
+
 ## Run the tests
 
 The correction-parsing logic (`backend/src/lib/correctionParser.ts`) has a full unit-test suite:
@@ -85,11 +134,16 @@ npm test
 
 ## Settings reference
 
-All of these are set from the in-app **⚙️ Settings** page (no `.env` editing required):
+All of these are set from the in-app **⚙️ Settings** page (no `.env` editing required). Settings come in two
+scopes:
 
+**Shared across every profile** (stored server-side in `backend/data/config.json`):
 - **Anthropic API key** — required, powers the conversation + correction engine.
-- **TTS provider** — `browser` (free, built-in Chrome/Edge voices), `elevenlabs`, or `openai`. ElevenLabs/OpenAI need their own API key below.
-- **OpenAI API key** — used for the Whisper speech-to-text **fallback** (only invoked automatically if your browser doesn't support the Web Speech API) and for OpenAI TTS if selected.
+- **OpenAI API key** — used for the Whisper speech-to-text **fallback** (only invoked automatically if a browser doesn't support the Web Speech API) and for OpenAI TTS if selected.
+- **ElevenLabs API key** — only needed if a profile selects ElevenLabs TTS.
+
+**Per-profile** (stored in SQLite, one row per profile — each person can set their own):
+- **TTS provider** — `browser` (free, built-in Chrome/Edge voices), `elevenlabs`, or `openai`.
 - **Voice name / ElevenLabs voice ID** — optional override.
 - **Speech speed** — 0.5x–1.5x, applied to whichever TTS engine is active.
 - **Explanation language** — Hungarian (default) or English, for the one-line correction explanations.
@@ -111,5 +165,7 @@ inline as part of that turn's reply.
 
 ## Data storage
 
-Session history and mistakes are stored locally in `backend/data/sessions.sqlite3` (SQLite via `better-sqlite3`).
-Both `backend/data/sessions.sqlite3` and `backend/data/config.json` are gitignored — they live only on your machine.
+Profiles, session history, and mistakes are stored locally in `backend/data/sessions.sqlite3` (SQLite via
+`better-sqlite3`) — each profile only ever sees its own sessions and summaries. Shared API keys live in
+`backend/data/config.json`. Both files are gitignored — they live only on your machine. Profiles have no
+passwords; anyone who can open the app on your network can pick any existing profile or create a new one.

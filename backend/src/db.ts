@@ -15,8 +15,19 @@ export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    tts_provider TEXT NOT NULL DEFAULT 'browser',
+    tts_voice TEXT NOT NULL DEFAULT '',
+    speech_speed REAL NOT NULL DEFAULT 1.0,
+    explanation_language TEXT NOT NULL DEFAULT 'hu',
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL REFERENCES profiles(id),
     mode TEXT NOT NULL,
     difficulty TEXT NOT NULL,
     started_at TEXT NOT NULL,
@@ -32,3 +43,10 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 `);
+
+// Lightweight migration for databases created before user profiles existed:
+// add the profile_id column if an older `sessions` table is missing it.
+const sessionColumns = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+if (!sessionColumns.some((c) => c.name === "profile_id")) {
+  db.exec("ALTER TABLE sessions ADD COLUMN profile_id INTEGER REFERENCES profiles(id)");
+}

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { loadConfig } from "../config.js";
+import type { TtsProvider } from "../types.js";
 
 export const ttsRouter = Router();
 
@@ -7,7 +8,12 @@ const DEFAULT_ELEVENLABS_VOICE = "21m00Tcm4TlvDq8ikWAM"; // "Rachel" - a clear, 
 const DEFAULT_OPENAI_VOICE = "alloy";
 
 ttsRouter.post("/", async (req, res) => {
-  const { text, speed } = req.body as { text?: string; speed?: number };
+  const { text, speed, ttsProvider, ttsVoice } = req.body as {
+    text?: string;
+    speed?: number;
+    ttsProvider?: TtsProvider;
+    ttsVoice?: string;
+  };
   if (!text || !text.trim()) {
     return res.status(400).json({ error: "text is required" });
   }
@@ -15,11 +21,11 @@ ttsRouter.post("/", async (req, res) => {
   const config = loadConfig();
 
   try {
-    if (config.ttsProvider === "elevenlabs") {
+    if (ttsProvider === "elevenlabs") {
       if (!config.elevenLabsApiKey) {
         return res.status(400).json({ error: "MISSING_ELEVENLABS_KEY" });
       }
-      const voiceId = config.ttsVoice || DEFAULT_ELEVENLABS_VOICE;
+      const voiceId = ttsVoice || DEFAULT_ELEVENLABS_VOICE;
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",
         headers: {
@@ -45,7 +51,7 @@ ttsRouter.post("/", async (req, res) => {
       return res.send(buffer);
     }
 
-    if (config.ttsProvider === "openai") {
+    if (ttsProvider === "openai") {
       if (!config.openaiApiKey) {
         return res.status(400).json({ error: "MISSING_OPENAI_KEY" });
       }
@@ -57,9 +63,9 @@ ttsRouter.post("/", async (req, res) => {
         },
         body: JSON.stringify({
           model: "tts-1",
-          voice: config.ttsVoice || DEFAULT_OPENAI_VOICE,
+          voice: ttsVoice || DEFAULT_OPENAI_VOICE,
           input: text,
-          speed: speed ?? config.speechSpeed ?? 1.0,
+          speed: speed ?? 1.0,
         }),
       });
 

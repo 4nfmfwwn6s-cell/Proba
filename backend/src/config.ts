@@ -11,10 +11,6 @@ const DEFAULT_CONFIG: AppConfig = {
   anthropicApiKey: "",
   elevenLabsApiKey: "",
   openaiApiKey: "",
-  ttsProvider: "browser",
-  ttsVoice: "",
-  speechSpeed: 1.0,
-  explanationLanguage: "hu",
 };
 
 function ensureDataDir(): void {
@@ -46,15 +42,12 @@ export function saveConfig(partial: Partial<AppConfig>): AppConfig {
   return next;
 }
 
-// Config with secrets redacted, safe to send to the browser.
-export function publicConfig(config: AppConfig): Record<string, unknown> {
+// Key presence flags only, safe to send to the browser - the secrets
+// themselves never leave the server.
+export function publicConfig(config: AppConfig): Record<string, boolean> {
   return {
     hasAnthropicKey: Boolean(config.anthropicApiKey),
     hasElevenLabsKey: Boolean(config.elevenLabsApiKey),
     hasOpenaiKey: Boolean(config.openaiApiKey),
-    ttsProvider: config.ttsProvider,
-    ttsVoice: config.ttsVoice,
-    speechSpeed: config.speechSpeed,
-    explanationLanguage: config.explanationLanguage,
   };
 }

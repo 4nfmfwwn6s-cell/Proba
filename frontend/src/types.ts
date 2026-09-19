@@ -37,14 +37,23 @@ export interface ChatTurnResult {
   correction: Correction | null;
 }
 
-export interface PublicSettings {
+export interface GlobalKeySettings {
   hasAnthropicKey: boolean;
   hasElevenLabsKey: boolean;
   hasOpenaiKey: boolean;
+}
+
+// Global key-presence flags plus the active profile's own preferences.
+export interface ProfileSettings extends GlobalKeySettings {
   ttsProvider: "browser" | "elevenlabs" | "openai";
   ttsVoice: string;
   speechSpeed: number;
   explanationLanguage: "hu" | "en";
+}
+
+export interface Profile {
+  id: number;
+  name: string;
 }
 
 export interface SessionSummary {

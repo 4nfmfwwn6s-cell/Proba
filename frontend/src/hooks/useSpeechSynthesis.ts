@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchTtsAudio } from "../api";
-import type { PublicSettings } from "../types";
+import type { ProfileSettings } from "../types";
 
-export function useSpeechSynthesis(settings: PublicSettings | null) {
+export function useSpeechSynthesis(settings: ProfileSettings | null) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -45,7 +45,12 @@ export function useSpeechSynthesis(settings: PublicSettings | null) {
     async (text: string) => {
       try {
         setIsSpeaking(true);
-        const blob = await fetchTtsAudio(text, settings?.speechSpeed ?? 1.0);
+        const blob = await fetchTtsAudio(
+          text,
+          settings?.speechSpeed ?? 1.0,
+          settings?.ttsProvider ?? "browser",
+          settings?.ttsVoice ?? ""
+        );
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audioRef.current = audio;
@@ -64,7 +69,7 @@ export function useSpeechSynthesis(settings: PublicSettings | null) {
         speakWithBrowser(text);
       }
     },
-    [settings?.speechSpeed, speakWithBrowser]
+    [settings?.speechSpeed, settings?.ttsProvider, settings?.ttsVoice, speakWithBrowser]
   );
 
   const speak = useCallback(

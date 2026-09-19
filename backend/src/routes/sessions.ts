@@ -6,6 +6,7 @@ export const sessionsRouter = Router();
 
 interface SessionRow {
   id: number;
+  profile_id: number;
   mode: ConversationMode;
   difficulty: Difficulty;
   started_at: string;
@@ -22,21 +23,36 @@ interface TurnRow {
 }
 
 sessionsRouter.post("/", (req, res) => {
-  const { mode, difficulty } = req.body as { mode?: ConversationMode; difficulty?: Difficulty };
-  if (!mode || !difficulty) {
-    return res.status(400).json({ error: "mode and difficulty are required" });
+  const { profileId, mode, difficulty } = req.body as {
+    profileId?: number;
+    mode?: ConversationMode;
+    difficulty?: Difficulty;
+  };
+  if (!profileId || !mode || !difficulty) {
+    return res.status(400).json({ error: "profileId, mode and difficulty are required" });
   }
+
+  const profile = db.prepare("SELECT id FROM profiles WHERE id = ?").get(profileId);
+  if (!profile) {
+    return res.status(404).json({ error: "Profile not found" });
+  }
+
   const now = new Date().toISOString();
   const info = db
-    .prepare("INSERT INTO sessions (mode, difficulty, started_at, ended_at) VALUES (?, ?, ?, NULL)")
-    .run(mode, difficulty, now);
-  res.json({ sessionId: info.lastInsertRowid, mode, difficulty, startedAt: now });
+    .prepare("INSERT INTO sessions (profile_id, mode, difficulty, started_at, ended_at) VALUES (?, ?, ?, ?, NULL)")
+    .run(profileId, mode, difficulty, now);
+  res.json({ sessionId: info.lastInsertRowid, profileId, mode, difficulty, startedAt: now });
 });
 
-sessionsRouter.get("/", (_req, res) => {
+sessionsRouter.get("/", (req, res) => {
+  const profileId = Number(req.query.profileId);
+  if (!profileId) {
+    return res.status(400).json({ error: "profileId query parameter is required" });
+  }
+
   const rows = db
-    .prepare("SELECT id, mode, difficulty, started_at, ended_at FROM sessions ORDER BY id DESC LIMIT 50")
-    .all() as SessionRow[];
+    .prepare("SELECT id, mode, difficulty, started_at, ended_at FROM sessions WHERE profile_id = ? ORDER BY id DESC LIMIT 50")
+    .all(profileId) as SessionRow[];
   res.json(
     rows.map((r) => ({
       id: r.id,
@@ -84,8 +100,12 @@ function buildSummary(turns: TurnRow[]) {
 
 sessionsRouter.get("/:id", (req, res) => {
   const sessionId = Number(req.params.id);
+  const profileId = req.query.profileId ? Number(req.query.profileId) : undefined;
+
   const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(sessionId) as SessionRow | undefined;
-  if (!session) return res.status(404).json({ error: "Session not found" });
+  if (!session || (profileId !== undefined && session.profile_id !== profileId)) {
+    return res.status(404).json({ error: "Session not found" });
+  }
 
   const turns = db
     .prepare("SELECT * FROM turns WHERE session_id = ? ORDER BY id ASC")

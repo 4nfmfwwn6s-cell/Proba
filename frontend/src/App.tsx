@@ -4,17 +4,44 @@ import { ChatBubble } from "./components/ChatBubble";
 import { MicButton } from "./components/MicButton";
 import { SettingsPage } from "./components/SettingsPage";
 import { SessionSummary } from "./components/SessionSummary";
+import { ProfileSelect } from "./components/ProfileSelect";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "./hooks/useSpeechSynthesis";
-import { createSession, endSession, getSession, getSettings, listSessions, sendChatTurn } from "./api";
-import type { ChatBubbleData, ChatMessage, ConversationMode, Difficulty, PublicSettings, SessionListItem, SessionSummary as SessionSummaryType } from "./types";
+import { createSession, endSession, getProfileSettings, getSession, listSessions, sendChatTurn } from "./api";
+import type {
+  ChatBubbleData,
+  ChatMessage,
+  ConversationMode,
+  Difficulty,
+  Profile,
+  ProfileSettings,
+  SessionListItem,
+  SessionSummary as SessionSummaryType,
+} from "./types";
 import { MODE_LABELS } from "./types";
 
-type Screen = "setup" | "chat" | "summary" | "settings" | "history" | "historyDetail";
+type Screen = "profile" | "setup" | "chat" | "summary" | "settings" | "history" | "historyDetail";
+
+const PROFILE_STORAGE_KEY = "englishCoachProfile";
+
+function loadStoredProfile(): Profile | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<Profile>;
+    if (typeof parsed.id === "number" && typeof parsed.name === "string") {
+      return { id: parsed.id, name: parsed.name };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("setup");
-  const [settings, setSettings] = useState<PublicSettings | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(() => loadStoredProfile());
+  const [screen, setScreen] = useState<Screen>(() => (loadStoredProfile() ? "setup" : "profile"));
+  const [settings, setSettings] = useState<ProfileSettings | null>(null);
   const [starting, setStarting] = useState(false);
 
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -31,8 +58,11 @@ export default function App() {
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    getSettings().then(setSettings).catch(() => {});
-  }, []);
+    if (!profile) return;
+    getProfileSettings(profile.id)
+      .then(setSettings)
+      .catch(() => {});
+  }, [profile]);
 
   const { speak } = useSpeechSynthesis(settings);
 
@@ -74,11 +104,28 @@ export default function App() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [bubbles]);
 
+  function handleProfileSelected(selected: Profile) {
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(selected));
+    setProfile(selected);
+    setScreen("setup");
+  }
+
+  function handleSwitchProfile() {
+    localStorage.removeItem(PROFILE_STORAGE_KEY);
+    setProfile(null);
+    setSettings(null);
+    setSessionId(null);
+    setBubbles([]);
+    historyRef.current = [];
+    setScreen("profile");
+  }
+
   async function handleStart(selectedMode: ConversationMode, selectedDifficulty: Difficulty) {
+    if (!profile) return;
     setStarting(true);
     setError(null);
     try {
-      const session = await createSession(selectedMode, selectedDifficulty);
+      const session = await createSession(profile.id, selectedMode, selectedDifficulty);
       setSessionId(session.sessionId);
       setMode(selectedMode);
       setDifficulty(selectedDifficulty);
@@ -104,8 +151,9 @@ export default function App() {
   }
 
   async function openHistory() {
+    if (!profile) return;
     try {
-      const list = await listSessions();
+      const list = await listSessions(profile.id);
       setSessions(list);
       setScreen("history");
     } catch {
@@ -114,8 +162,9 @@ export default function App() {
   }
 
   async function openHistoryDetail(id: number) {
+    if (!profile) return;
     try {
-      const detail = await getSession(id);
+      const detail = await getSession(id, profile.id);
       setSummary(detail.summary);
       setScreen("historyDetail");
     } catch {
@@ -123,11 +172,28 @@ export default function App() {
     }
   }
 
+  if (screen === "profile" || !profile) {
+    return (
+      <div className="app">
+        <header className="app-header">
+          <h1>🗣️ English Coach</h1>
+        </header>
+        <div className="main">
+          {error && <div className="banner error">{error}</div>}
+          <ProfileSelect onSelect={handleProfileSelected} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="app-header">
         <h1>🗣️ English Coach</h1>
-        <div style={{ display: "flex", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <button className="text-link-button" onClick={handleSwitchProfile} title="Profil váltása">
+            👤 {profile.name}
+          </button>
           {screen === "setup" && (
             <button className="icon-button" onClick={openHistory} aria-label="Előzmények">
               📜
@@ -149,11 +215,18 @@ export default function App() {
 
         {screen === "setup" && <ModeSelect onStart={handleStart} starting={starting} />}
 
-        {screen === "settings" && <SettingsPage onClose={() => setScreen("setup")} />}
+        {screen === "settings" && (
+          <SettingsPage
+            profileId={profile.id}
+            profileName={profile.name}
+            onClose={() => setScreen("setup")}
+            onSettingsChanged={setSettings}
+          />
+        )}
 
         {screen === "history" && (
           <div className="setup-screen">
-            <div className="section-title">Korábbi beszélgetések</div>
+            <div className="section-title">Korábbi beszélgetések - {profile.name}</div>
             {sessions.length === 0 && <div>Még nincs mentett beszélgetés.</div>}
             {sessions.map((s) => (
               <div className="session-list-item" key={s.id} onClick={() => openHistoryDetail(s.id)}>
