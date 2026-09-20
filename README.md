@@ -20,6 +20,7 @@ Proba/
 
 - **Node.js 18+** (Node 20/22 recommended) — https://nodejs.org
 - **Google Chrome or Microsoft Edge** on Windows 11 (both are Chromium-based and support the Web Speech API used for live transcription)
+- Optional: an **iPhone** on the same Wi-Fi network, if you want to use the app from your phone — requires the one-time HTTPS setup in "HTTPS for LAN / iOS mic access" below (iOS Safari falls back to the Whisper fallback for speech-to-text if needed, same as any browser without the Web Speech API)
 - An **Anthropic API key** (https://console.anthropic.com) — you'll paste this into the app's Settings page, not a `.env` file
 - Optional: an **OpenAI API key** (used only as a fallback speech-to-text engine, and optionally for OpenAI TTS)
 - Optional: an **ElevenLabs API key** (only if you want ElevenLabs TTS instead of the free browser voice)
@@ -104,6 +105,10 @@ English coach backend listening on:
 Open that `Network:` address in a browser on the other device. (In dev mode, the Vite frontend at port 5173 is
 also reachable on your LAN — Vite prints its own `Network:` URL when you run `npm run dev` in `frontend/`.)
 
+> **Using an iPhone?** Plain HTTP (as above) works fine for a laptop/desktop browser on the same network, but
+> iOS blocks microphone access unless the connection is HTTPS. See **"HTTPS for LAN / iOS mic access"** below
+> before trying it from a phone.
+
 ### Windows Firewall
 
 The first time the server binds to `0.0.0.0`, Windows Defender Firewall may show an **"Windows Defender Firewall
@@ -132,6 +137,105 @@ remembers them across reboots and app restarts.
 > can open any existing profile or create a new one, and every profile uses the same shared Anthropic/OpenAI/
 > ElevenLabs API keys (and therefore the same billing). That's fine for a trusted home network; don't expose
 > this port beyond your LAN.
+
+## HTTPS for LAN / iOS mic access
+
+Plain HTTP is fine on the same PC (`localhost` always counts as a secure context), but **iOS Safari — and every
+modern browser — refuses microphone access on any other address over plain HTTP.** To use the app from your
+iPhone over Wi-Fi, generate a certificate once and both servers pick it up automatically.
+
+### 1. Generate the certificate
+
+```powershell
+cd backend
+npm run generate-cert
+```
+
+This creates `Proba\certs\cert.pem` and `Proba\certs\key.pem` (gitignored — they never leave your machine),
+valid for `localhost`, `127.0.0.1`, and whichever LAN IP(s) it auto-detects on your PC right now, for 824 days.
+It prints exactly what it covered:
+
+```
+Generated a self-signed HTTPS certificate:
+  ...\Proba\certs\cert.pem
+  ...\Proba\certs\key.pem
+
+Valid for:
+  - localhost
+  - 127.0.0.1
+  - ::1
+  - 192.168.1.23
+
+Expires: ...
+```
+
+If your PC's IP isn't in that list (multiple network adapters, or it changed later — Wi-Fi IPs are often
+reassigned by your router over time), pass it explicitly and re-run:
+
+```powershell
+npm run generate-cert -- 192.168.1.23
+```
+
+**Whenever your PC's LAN IP changes, re-run `npm run generate-cert`** and re-trust the new certificate on each
+device (below) — a cert for the old IP won't cover the new one.
+
+### 2. Start the app
+
+Restart whatever's running so it picks up the new certificate. The **single production build is the simplest
+option for phone use** (one HTTPS origin, nothing else to configure):
+
+```powershell
+cd frontend
+npm run build
+cd ..\backend
+npm run build
+npm start
+```
+
+The console now prints `https://` URLs and a reminder about the certificate. (The two-terminal dev setup — `npm
+run dev` in both `backend/` and `frontend/` — also switches to HTTPS automatically once the certificate exists,
+if you'd rather use that instead.)
+
+### 3. Trust the certificate on Windows (so Chrome/Edge stop warning you)
+
+Open **PowerShell** (no Administrator needed) and run:
+
+```powershell
+Import-Certificate -FilePath "C:\path\to\Proba\certs\cert.pem" -CertStoreLocation Cert:\CurrentUser\Root
+```
+
+Click **Yes** on the security warning that pops up. Then **fully close and reopen Chrome/Edge** (not just the
+tab). If you'd rather use the mouse: double-click `certs\cert.pem` in File Explorer → **Install Certificate...**
+→ **Current User** → **Place all certificates in the following store** → **Browse...** → **Trusted Root
+Certification Authorities** → **Finish** → **Yes**.
+
+### 4. Trust the certificate on your iPhone
+
+1. On your PC, note one of the `Network:` URLs the backend printed (e.g. `https://192.168.1.23:3001`).
+2. On your **iPhone**, connect to the **same Wi-Fi network**, open **Safari**, and go to
+   `https://192.168.1.23:3001/cert.pem` (same host/port, path `/cert.pem`).
+3. Safari will first show a **"This Connection Is Not Private"** warning — this is expected, since the
+   certificate isn't trusted yet. Tap **Show Details** → **visit this website** → **Visit Website** to continue.
+4. Safari then shows **"This website is trying to download a configuration profile. Do you want to allow
+   this?"** — tap **Allow**.
+5. Go to **Settings → General → VPN & Device Management**, tap the downloaded profile (**"English Coach (local
+   dev)"**), then tap **Install** (top right) — enter your passcode if asked, then **Install** again to confirm,
+   then **Done**.
+6. One more step — installing the profile isn't quite enough by itself: go to **Settings → General → About →
+   Certificate Trust Settings**, and turn **on** the toggle next to the certificate you just installed.
+
+After that, reload the page — the padlock should show a trusted connection, and tapping the 🎤 button will
+prompt for microphone permission instead of silently failing.
+
+### If you'd rather use mkcert
+
+[mkcert](https://github.com/FiloSottile/mkcert) is a good alternative if you already have it (or Chocolatey/
+Scoop) installed: `mkcert -install` sets up a local CA that Windows and Chrome/Edge trust automatically (no
+manual Windows step above), then `mkcert -cert-file backend/../certs/cert.pem -key-file backend/../certs/key.pem
+localhost 127.0.0.1 <your-LAN-IP>` produces files in the same place the app expects them. iOS still needs its
+own manual trust step regardless of which tool generated the cert (get `mkcert`'s root CA — `mkcert -CAROOT` —
+onto the phone and trust it the same way as step 4 above), so the built-in `npm run generate-cert` script above
+avoids the extra install for most people.
 
 ## How the mic, corrections, and conversation start work
 
@@ -249,6 +353,9 @@ as part of that turn's reply (still in English).
 - **"A mikrofon használatához engedélyt kell adnod"** — microphone permission was denied. Click the padlock/site-info icon in the address bar and allow microphone access for `localhost`, then reload.
 - **Corrections never show up / chat errors out** — check that an Anthropic API key is saved in Settings; the app will show a banner if it's missing.
 - **The app never answers, even though I stopped talking** — remember the mic is a toggle now: tap it again to stop listening and send. It intentionally never replies while the mic is still on.
+- **iPhone mic still doesn't work after trusting the certificate** — double-check step 6 in "HTTPS for LAN / iOS mic access" (**Settings → General → About → Certificate Trust Settings**): installing the profile alone isn't enough, the toggle there also has to be switched on. Also confirm the URL bar shows `https://`, not `http://`.
+- **"NET::ERR_CERT_COMMON_NAME_INVALID" / cert warnings after re-running `npm run generate-cert`** — your PC's LAN IP probably changed since the certificate was generated. Re-run the generate step (pass the new IP explicitly if needed), then re-trust it on every device again — see "HTTPS for LAN / iOS mic access".
+- **Chrome/Edge still warns after importing the certificate on Windows** — you likely need to fully quit and reopen the browser (closing the last tab/window isn't enough); browsers cache certificate trust state per-process.
 
 ## Data storage
 
